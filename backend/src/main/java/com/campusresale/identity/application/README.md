@@ -16,9 +16,8 @@
 
 - `AuthService` 是注册和登录的主入口。
 - `SessionLookupService` 是普通请求恢复登录态的主入口。
-- `CurrentUserMapper` 里保留了 M1 过渡逻辑：`VERIFIED_STUDENT` 推导 `canTrade = true`。
+- `CurrentUserMapper` 通过 `CampusTradeEligibilityResolver` 读取真实校园认证状态和交易权限。
 
 后续扩展：
 
-- B 成员认证表合并后，优先修改 `CurrentUserMapper` 的 `canTrade` 推导逻辑。
 - 如果后续要展示登录设备列表，优先扩展 `SessionLookupService` 和 `UserSessionRepository`。

@@ -1,6 +1,6 @@
 # identity 目录说明
 
-本目录是 A 成员负责的身份、登录会话和当前用户模块。
+本目录包含身份、登录会话、当前用户和校园认证模块。A 成员负责身份会话基础能力，B 成员在 `verification` 子目录补充校园认证能力。
 
 请求主链路：
 
@@ -17,10 +17,11 @@
 | `application` | 业务流程编排，例如登录、注册、session 续期、密码校验。 |
 | `domain` | 领域对象，只表达用户和 session 的核心状态。 |
 | `infrastructure` | 数据库访问，封装 SQL 和 `JdbcTemplate`。 |
+| `verification` | 校园认证提交、分数计算、管理员审核和交易权限判断。 |
 
 当前约定：
 
 - 用户名规则：3 到 20 位，只允许字母、数字和下划线，服务端统一转小写入库。
 - 注册用户只授予 `REGISTERED_USER`。
-- `VERIFIED_STUDENT` 在 M1 过渡期用于推导 `canTrade = true`。
+- `canTrade` 使用 B 成员认证表的完整规则推导，不再只按 `VERIFIED_STUDENT` 角色兜底。
 - 真实 session token 只写入浏览器 Cookie，数据库只保存 SHA-256 hash。
