@@ -3,8 +3,9 @@ package com.campusresale.identity.application;
 
 import com.campusresale.identity.api.CurrentUserResponse;
 import com.campusresale.identity.domain.UserAccount;
+import com.campusresale.identity.verification.CampusTradeEligibility;
+import com.campusresale.identity.verification.CampusTradeEligibilityResolver;
 import com.campusresale.platform.security.CurrentPrincipal;
-import com.campusresale.platform.security.SecurityProperties;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -15,6 +16,12 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class CurrentUserMapper {
+
+    private final CampusTradeEligibilityResolver campusTradeEligibilityResolver;
+
+    public CurrentUserMapper(CampusTradeEligibilityResolver campusTradeEligibilityResolver) {
+        this.campusTradeEligibilityResolver = campusTradeEligibilityResolver;
+    }
 
     /**
      * 根据数据库用户对象组装 CurrentUser。
@@ -60,16 +67,8 @@ public class CurrentUserMapper {
         List<String> roles = new ArrayList<>(roleSet);
         roles.sort(Comparator.naturalOrder());
 
-        /*
-         * M1 并行开发过渡逻辑：
-         * B 成员的 campus_auths / campus_auth_factors 尚未合并时，A 分支无法读取真实认证分数。
-         * 因此这里暂时以 VERIFIED_STUDENT 角色推导 canTrade=true 和 APPROVED。
-         * B 分支合并后，应替换为“score >= 60 + 证件因子通过 + 认证 APPROVED + 角色存在”的完整规则。
-         */
-        boolean canTrade = roleSet.contains(SecurityProperties.VERIFIED_STUDENT_ROLE);
+        CampusTradeEligibility eligibility = campusTradeEligibilityResolver.resolve(id, roleSet);
 
-        String verificationStatus = canTrade ? "APPROVED" : "NONE";
-
-        return new CurrentUserResponse(id, username, nickname, roles, verificationStatus, canTrade);
+        return new CurrentUserResponse(id, username, nickname, roles, eligibility.verificationStatus(), eligibility.canTrade());
     }
 }

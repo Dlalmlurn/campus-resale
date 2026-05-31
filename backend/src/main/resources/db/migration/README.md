@@ -9,6 +9,9 @@
 | `V3__auth_session_indexes.sql` | A 成员身份会话补充索引和初始用户名约束。 |
 | `V4__seed_auth_demo_users.sql` | A 成员演示账号和角色绑定。 |
 | `V5__tighten_username_rules.sql` | A 成员修正用户名规则：3 到 20 位，只允许小写字母、数字和下划线。 |
+| `V6__campus_auth_schema.sql` | B 成员校园认证主表、因子表和认证材料关联表。 |
+| `V7__file_verification_indexes.sql` | B 成员文件索引、认证材料可见性约束和敏感访问日志索引。 |
+| `V8__campus_auth_configs.sql` | B 成员校园认证邮箱后缀、材料数量、大小、重提限制配置和 `student_demo` 已认证记录。 |
 
 用户名规则说明：
 

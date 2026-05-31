@@ -107,6 +107,7 @@ M1 不实现：
 - 登录态通过 HttpOnly Cookie 承载，建议 Cookie 名为 `CR_SESSION`。
 - 服务端只保存 session token hash，不保存明文 token。
 - Cookie 设置建议：`HttpOnly`, `SameSite=Lax`, `Path=/`。
+- 当前 A 分支实现备注：服务端 session 会滑动续期，但 `CR_SESSION` Cookie `Max-Age` 暂按 7 天闲置期写入且普通请求不会重写 Cookie；后续集成修正时需要对齐 30 天绝对上限或刷新 Cookie。
 - M1 最低 CSRF 防护：所有非 `GET/HEAD/OPTIONS` 请求校验 `Origin` 或 `Referer` 为本站来源。
 - 如果实现 token 方案，使用可读 Cookie `CR_CSRF` + 请求头 `X-CSRF-Token`，但不要让前端读取 `CR_SESSION`。
 

@@ -26,6 +26,8 @@ session 有两个过期时间：
 
 普通访问接口不会轮换 token，只会更新 `last_active_at` 和 `expires_at`。
 
+当前实现注意：登录时写入的 `CR_SESSION` Cookie `Max-Age` 为 7 天，普通访问接口不会重写 Cookie。因此服务端 session 虽然会滑动续期到 30 天绝对上限内，浏览器侧登录态仍会在登录后 7 天自然过期。后续集成修正应把 Cookie 生命周期对齐到 30 天绝对上限，或在有效请求后重写 Cookie。
+
 ## 用户名规则
 
 用户名规则已经统一为：
@@ -115,6 +117,7 @@ mvn test
 登录态建议验证：
 
 - 登录成功响应包含 `Set-Cookie: CR_SESSION=...; HttpOnly; SameSite=Lax`。
+- 当前 Cookie `Max-Age` 为 7 天，普通请求暂不刷新 Cookie。
 - `GET /api/auth/me` 未登录返回 `401 AUTH_REQUIRED`。
 - `student_demo` 登录后 `canTrade = true`。
 - `super_admin` 第二次登录后第一次登录的 Cookie 失效。

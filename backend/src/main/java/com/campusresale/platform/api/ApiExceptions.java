@@ -51,6 +51,34 @@ public final class ApiExceptions {
     }
 
     /**
+     * 目标资源不存在或对当前用户不可见，返回 404 NOT_FOUND。
+     */
+    public static ApiException notFound(String message) {
+        return new ApiException(HttpStatus.NOT_FOUND, "NOT_FOUND", message);
+    }
+
+    /**
+     * 上传文件超过大小限制，返回 413 PAYLOAD_TOO_LARGE。
+     */
+    public static ApiException payloadTooLarge(String message, Map<String, Object> details) {
+        return new ApiException(HttpStatus.PAYLOAD_TOO_LARGE, "PAYLOAD_TOO_LARGE", message, details);
+    }
+
+    /**
+     * 上传文件类型不受支持，返回 415 UNSUPPORTED_MEDIA_TYPE。
+     */
+    public static ApiException unsupportedMediaType(String message, Map<String, Object> details) {
+        return new ApiException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "UNSUPPORTED_MEDIA_TYPE", message, details);
+    }
+
+    /**
+     * 触发限流或 24 小时提交次数限制，返回 429 RATE_LIMITED。
+     */
+    public static ApiException rateLimited(String message, Map<String, Object> details) {
+        return new ApiException(HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMITED", message, details);
+    }
+
+    /**
      * 未预期服务端错误，返回 500 INTERNAL_ERROR。
      */
     public static ApiException internalError() {
