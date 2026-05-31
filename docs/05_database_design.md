@@ -63,7 +63,7 @@
 
 | 表 | 关键字段 | 约束与说明 |
 | --- | --- | --- |
-| `users` | `id`, `username`, `password_hash`, `nickname`, `phone`, `personal_email`, `avatar_file_id`, `public_department_enabled`, `account_status`, `alumni_flag`, `disabled_at`, `created_at`, `updated_at` | 普通用户主体。真实姓名、学号和认证材料不放在公开资料字段中。`avatar_file_id` 指向 `stored_files`。 |
+| `users` | `id`, `username`, `password_hash`, `nickname`, `phone`, `personal_email`, `avatar_file_id`, `public_department_enabled`, `account_status`, `alumni_flag`, `disabled_at`, `created_at`, `updated_at` | 普通用户主体。`username` 最终规则为 3 到 20 位，只允许小写字母、数字和下划线；服务端接收大小写输入但统一转小写入库，不允许空格和其他符号。真实姓名、学号和认证材料不放在公开资料字段中。`avatar_file_id` 指向 `stored_files`。 |
 | `roles` | `id`, `code`, `name`, `description` | 建议种子：`REGISTERED_USER`, `VERIFIED_STUDENT`, `CONTENT_ADMIN`, `SUPER_ADMIN`。 |
 | `user_roles` | `user_id`, `role_id`, `assigned_at`, `assigned_by_admin_id` | 复合唯一 `(user_id, role_id)`。管理员也可复用 `users` 主体加角色，或在实现中拆后台账号，但权限语义必须一致。 |
 | `user_sessions` | `id`, `user_id`, `session_token_hash`, `last_active_at`, `expires_at`, `absolute_expires_at`, `ip_address`, `user_agent`, `revoked_at`, `created_at` | 服务端 Cookie session。受保护请求刷新 `last_active_at` 和 `expires_at`，默认闲置 7 天、绝对 30 天。管理员单端登录通过同角色活跃会话唯一性或登录时撤销旧会话实现。 |

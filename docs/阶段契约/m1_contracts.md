@@ -144,6 +144,12 @@ M1 不实现：
 | `verificationStatus` | 当前校园认证状态。没有认证记录时为 `NONE`。 |
 | `canTrade` | 是否具备完整交易权限。M1 中只有认证审核通过后为 `true`。 |
 
+并行开发过渡说明：
+
+- A 成员身份会话分支在 B 成员 `campus_auths` 与 `campus_auth_factors` 合并前，暂时按 `VERIFIED_STUDENT` 角色推导 `verificationStatus = APPROVED` 与 `canTrade = true`。
+- B 成员认证表和认证审核逻辑合并后，应恢复为完整规则：`score >= 60`、至少一项 `STUDENT_CARD` 或 `CAMPUS_CARD` 因子通过、`CampusVerificationStatus = APPROVED`、用户拥有 `VERIFIED_STUDENT` 角色。
+- 该过渡逻辑只用于 M1 并行联调和演示账号，不改变正式认证口径。
+
 ### StoredFileSummary
 
 ```json
@@ -299,7 +305,7 @@ DRAFT -> PENDING_REVIEW -> ON_SALE
 
 规则：
 
-- `username` 唯一，长度 3-80。
+- `username` 唯一，长度 3-20，只允许字母、数字和下划线；服务端统一转小写入库，不允许空格和其他符号。
 - `password` 最少 8 位。
 - 密码必须使用 bcrypt 或 Argon2id 存储。
 - 注册成功后默认授予 `REGISTERED_USER`。
@@ -715,7 +721,7 @@ M1 不重复创建上述表，只允许 `ALTER TABLE` 补字段或补约束。
 | --- | --- | --- |
 | `V3` | A | Auth 必要补充：用户字段、session 索引、管理员种子账号所需约束。 |
 | `V4` | A | Auth 种子数据：测试用户、测试管理员、角色绑定。 |
-| `V5` | A | Auth 修正迁移预留，仅用于契约内冲突修复。 |
+| `V5` | A | Auth 修正迁移：用户名收紧为 3-20 位，只允许字母、数字和下划线。 |
 | `V6` | B | `campus_auths`, `campus_auth_factors`。 |
 | `V7` | B | 文件相关补充索引、认证材料约束、敏感访问日志索引补充。 |
 | `V8` | B | 认证相关种子配置和修正迁移预留。 |
@@ -756,6 +762,15 @@ M1 不重复创建上述表，只允许 `ALTER TABLE` 补字段或补约束。
 | `admin` | `CONTENT_ADMIN`, `SUPER_ADMIN` | 后台审核。 |
 | `student_demo` | `REGISTERED_USER`, `VERIFIED_STUDENT` | 发布商品。 |
 | `user_demo` | `REGISTERED_USER` | 提交认证。 |
+
+A 成员身份会话分支的实际演示账号：
+
+| 用户名 | 角色 | 密码 | 用途 |
+| --- | --- | --- | --- |
+| `content_admin` | `CONTENT_ADMIN` | `520zikejiang` | 日常内容审核，允许多端登录，便于联调和课程演示。 |
+| `super_admin` | `SUPER_ADMIN` | `520zikejiang` | 系统级管理员，只允许单端登录。 |
+| `student_demo` | `REGISTERED_USER`, `VERIFIED_STUDENT` | `520zikejiang` | 已认证学生演示账号。 |
+| `user_demo` | `REGISTERED_USER` | `520zikejiang` | 普通注册用户演示账号。 |
 
 ## 最小验收
 
