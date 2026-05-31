@@ -67,7 +67,7 @@ data/
 tmp/
 temp/
 uploads/
-storage/
+/storage/
 minio/
 
 # Generated archives and binary exports
