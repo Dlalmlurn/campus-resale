@@ -122,6 +122,40 @@ class FileServiceTest {
         );
     }
 
+    @Test
+    void seedGoodsPlaceholderIsReadableWhenObjectIsMissing() {
+        StoredFileRecord seedPlaceholder = new StoredFileRecord(
+                11L,
+                "bucket",
+                "seed/goods-placeholder/monitor.png",
+                "monitor-placeholder.png",
+                "image/png",
+                0,
+                "seed-monitor-placeholder",
+                FileKind.GOODS_IMAGE,
+                VisibilityScope.PUBLIC,
+                1L,
+                "GOODS",
+                100L,
+                FileAuditStatus.APPROVED,
+                Instant.parse("2026-06-01T00:00:00Z")
+        );
+        when(fileRepository.findById(11L)).thenReturn(Optional.of(seedPlaceholder));
+        when(objectStorageClient.getObject("seed/goods-placeholder/monitor.png"))
+                .thenThrow(new ApiException(org.springframework.http.HttpStatus.NOT_FOUND, "NOT_FOUND", "missing"));
+
+        FileContentResponse content = fileService.content(
+                11L,
+                Optional.empty(),
+                null,
+                "127.0.0.1"
+        );
+
+        assertThat(content.contentType()).isEqualTo("image/png");
+        assertThat(content.filename()).isEqualTo("monitor-placeholder.png");
+        assertThat(content.bytes()).isNotEmpty();
+    }
+
     private StoredFileRecord record(FileKind fileKind, VisibilityScope visibilityScope, long ownerUserId) {
         return new StoredFileRecord(
                 10L,

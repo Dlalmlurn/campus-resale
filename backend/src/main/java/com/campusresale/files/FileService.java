@@ -1,5 +1,6 @@
 package com.campusresale.files;
 
+import com.campusresale.platform.api.ApiException;
 import com.campusresale.platform.api.ApiExceptions;
 import com.campusresale.platform.audit.AuditLogRepository;
 import com.campusresale.platform.config.CampusResaleProperties;
@@ -187,7 +188,15 @@ public class FileService {
     }
 
     private FileContentResponse originalContent(StoredFileRecord record) {
-        StoredObject storedObject = objectStorageClient.getObject(record.storageKey());
+        StoredObject storedObject;
+        try {
+            storedObject = objectStorageClient.getObject(record.storageKey());
+        } catch (ApiException exception) {
+            if (isSeedGoodsPlaceholder(record)) {
+                return seededGoodsPlaceholder(record);
+            }
+            throw exception;
+        }
         String contentType = storedObject.contentType() == null || storedObject.contentType().isBlank()
                 ? record.contentType()
                 : storedObject.contentType();
@@ -216,6 +225,38 @@ public class FileService {
             ByteArrayOutputStream output = new ByteArrayOutputStream();
             ImageIO.write(image, "png", output);
             return new FileContentResponse(output.toByteArray(), "image/png", "campus-auth-material-preview.png");
+        } catch (Exception exception) {
+            throw ApiExceptions.internalError();
+        }
+    }
+
+    private FileContentResponse seededGoodsPlaceholder(StoredFileRecord record) {
+        try {
+            BufferedImage image = new BufferedImage(960, 640, BufferedImage.TYPE_INT_RGB);
+            var graphics = image.createGraphics();
+            graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            graphics.setColor(new Color(245, 247, 250));
+            graphics.fillRect(0, 0, image.getWidth(), image.getHeight());
+            graphics.setColor(new Color(38, 70, 83));
+            graphics.fillRoundRect(64, 64, 832, 512, 36, 36);
+            graphics.setColor(new Color(233, 196, 106));
+            graphics.fillOval(112, 112, 144, 144);
+            graphics.setColor(new Color(244, 162, 97));
+            graphics.fillRoundRect(300, 140, 480, 72, 24, 24);
+            graphics.setColor(new Color(42, 157, 143));
+            graphics.fillRoundRect(300, 260, 360, 64, 22, 22);
+            graphics.setColor(new Color(255, 255, 255));
+            graphics.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 42));
+            graphics.drawString("Campus Resale", 112, 430);
+            graphics.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 26));
+            graphics.drawString("Seed goods placeholder image", 112, 476);
+            graphics.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 20));
+            graphics.drawString("File ID: " + record.id(), 112, 524);
+            graphics.dispose();
+
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            ImageIO.write(image, "png", output);
+            return new FileContentResponse(output.toByteArray(), "image/png", record.originalName());
         } catch (Exception exception) {
             throw ApiExceptions.internalError();
         }
@@ -349,5 +390,11 @@ public class FileService {
                 SecurityProperties.CONTENT_ADMIN_ROLE,
                 SecurityProperties.SUPER_ADMIN_ROLE
         });
+    }
+
+    private boolean isSeedGoodsPlaceholder(StoredFileRecord record) {
+        return record.fileKind() == FileKind.GOODS_IMAGE
+                && record.storageKey() != null
+                && record.storageKey().startsWith("seed/goods-placeholder/");
     }
 }
