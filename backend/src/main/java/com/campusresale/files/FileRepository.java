@@ -154,6 +154,21 @@ public class FileRepository {
         );
     }
 
+    public void updateVisibilityScope(Collection<Long> fileIds, VisibilityScope visibilityScope) {
+        if (fileIds == null || fileIds.isEmpty()) {
+            return;
+        }
+        namedParameterJdbcTemplate.update("""
+                        UPDATE stored_files
+                        SET visibility_scope = :visibilityScope
+                        WHERE id IN (:ids)
+                        """,
+                new MapSqlParameterSource()
+                        .addValue("visibilityScope", visibilityScope.name())
+                        .addValue("ids", fileIds)
+        );
+    }
+
     public void updateCampusAuthMaterialAuditStatus(long campusAuthId, FileAuditStatus auditStatus) {
         jdbcTemplate.update("""
                         UPDATE stored_files sf

@@ -12,6 +12,9 @@
 | `V6__campus_auth_schema.sql` | B 成员校园认证主表、因子表和认证材料关联表。 |
 | `V7__file_verification_indexes.sql` | B 成员文件索引、认证材料可见性约束和敏感访问日志索引。 |
 | `V8__campus_auth_configs.sql` | B 成员校园认证邮箱后缀、材料数量、大小、重提限制配置和 `student_demo` 已认证记录。 |
+| `V9__goods_catalog_schema.sql` | C 成员商品主表、商品图片关联、商品标签关联和搜索向量刷新触发器。 |
+| `V10__goods_audit_rules_schema.sql` | C 成员商品审核记录、规则命中记录和禁售词表。 |
+| `V11__goods_search_seed_data.sql` | C 成员商品搜索索引、禁售词种子和少量可读占位图商品演示数据。 |
 
 用户名规则说明：
 
