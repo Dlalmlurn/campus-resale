@@ -160,10 +160,22 @@ export function App() {
     void refreshGoods();
   }, [refreshGoods]);
 
+  useEffect(() => {
+    if (route.name === "seller" && currentUser && !currentUser.canTrade) {
+      notify("error", "完成校园认证后才能发布商品");
+      navigate({ name: "verification" });
+    }
+  }, [currentUser, navigate, notify, route.name]);
+
   const guardedNavigate = (next: Route) => {
     if (!currentUser && (next.name === "verification" || next.name === "seller" || next.name === "admin")) {
       notify("error", "请先登录后继续");
       navigate({ name: "auth" });
+      return;
+    }
+    if (next.name === "seller" && currentUser && !currentUser.canTrade) {
+      notify("error", "完成校园认证后才能发布商品");
+      navigate({ name: "verification" });
       return;
     }
     if (next.name === "admin" && !isAdmin(currentUser)) {
@@ -241,7 +253,7 @@ export function App() {
         {route.name === "goods" && <GoodsDetailPage id={route.id} onBack={() => navigate({ name: "market" })} notify={notify} />}
         {route.name === "auth" && <AuthPage currentUser={currentUser} onAuthenticated={setCurrentUser} navigate={navigate} notify={notify} />}
         {route.name === "verification" && currentUser && <VerificationPage currentUser={currentUser} onUserChange={setCurrentUser} notify={notify} />}
-        {route.name === "seller" && currentUser && <SellerPage catalog={catalog} notify={notify} />}
+        {route.name === "seller" && currentUser?.canTrade && <SellerPage catalog={catalog} notify={notify} />}
         {route.name === "admin" && isAdmin(currentUser) && <AdminPage notify={notify} />}
       </main>
     </div>
