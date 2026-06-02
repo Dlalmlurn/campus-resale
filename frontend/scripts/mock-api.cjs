@@ -85,7 +85,7 @@ let verification = {
   campusEmail: "demo@campus.example.edu",
   score: 80,
   status: "PENDING_REVIEW",
-  factors: [{ factorType: "STUDENT_CARD", status: "VALID", scoreValue: 80, fileIds: [800] }]
+  factors: [{ factorType: "STUDENT_CARD", status: "VERIFIED", scoreValue: 80, fileIds: [800] }]
 };
 
 function send(response, status, payload) {
@@ -113,13 +113,26 @@ function page(items) {
 
 function userFor(username) {
   const isAdmin = username === "content_admin";
+  const isVerifiedStudent = username === "student_demo";
+  if (!isAdmin && !isVerifiedStudent) return registeredUserFor(username);
   return {
     id: isAdmin ? 1 : 21,
     username,
     nickname: isAdmin ? "内容管理员" : "示例同学",
-    roles: isAdmin ? ["CONTENT_ADMIN"] : ["USER"],
-    verificationStatus: isAdmin ? "APPROVED" : "APPROVED",
-    canTrade: true
+    roles: isAdmin ? ["CONTENT_ADMIN"] : ["REGISTERED_USER", "VERIFIED_STUDENT"],
+    verificationStatus: isVerifiedStudent ? "APPROVED" : "NONE",
+    canTrade: isVerifiedStudent
+  };
+}
+
+function registeredUserFor(username) {
+  return {
+    id: 21,
+    username,
+    nickname: "示例同学",
+    roles: ["REGISTERED_USER"],
+    verificationStatus: "NONE",
+    canTrade: false
   };
 }
 
@@ -141,7 +154,7 @@ const server = http.createServer(async (request, response) => {
 
   if (request.method === "POST" && path === "/api/auth/register") {
     const body = await readJson(request);
-    currentUser = userFor(body.username || "new_student");
+    currentUser = registeredUserFor(body.username || "new_student");
     return send(response, 200, currentUser);
   }
 
@@ -194,7 +207,7 @@ const server = http.createServer(async (request, response) => {
     verification = {
       ...verification,
       ...body,
-      factors: [{ factorType: body.documentType, status: "VALID", scoreValue: 80, fileIds: body.documentFileIds }]
+      factors: [{ factorType: body.documentType, status: "VERIFIED", scoreValue: 80, fileIds: body.documentFileIds }]
     };
     return send(response, 200, verification);
   }
