@@ -7,7 +7,8 @@ import java.util.Map;
 public enum FileKind {
     AVATAR,
     GOODS_IMAGE,
-    CAMPUS_AUTH_MATERIAL;
+    CAMPUS_AUTH_MATERIAL,
+    ORDER_EVIDENCE;
 
     public static FileKind parse(String value) {
         return Arrays.stream(values())
