@@ -232,6 +232,69 @@ public class GoodsRepository {
         );
     }
 
+    public Long currentOccupiedOrderId(long goodsId) {
+        return jdbcTemplate.queryForObject("""
+                        SELECT current_occupied_order_id
+                        FROM goods
+                        WHERE id = ?
+                        """,
+                Long.class,
+                goodsId
+        );
+    }
+
+    public int reserveForOrder(long goodsId, long orderId) {
+        return jdbcTemplate.update("""
+                        UPDATE goods
+                        SET status = 'RESERVED',
+                            current_occupied_order_id = ?,
+                            updated_at = ?
+                        WHERE id = ?
+                          AND status = 'ON_SALE'
+                          AND audit_status = 'APPROVED'
+                          AND current_occupied_order_id IS NULL
+                          AND is_deleted = FALSE
+                        """,
+                orderId,
+                Timestamp.from(Instant.now()),
+                goodsId
+        );
+    }
+
+    public int releaseReservation(long goodsId, long orderId) {
+        return jdbcTemplate.update("""
+                        UPDATE goods
+                        SET status = 'ON_SALE',
+                            current_occupied_order_id = NULL,
+                            updated_at = ?
+                        WHERE id = ?
+                          AND status = 'RESERVED'
+                          AND current_occupied_order_id = ?
+                          AND is_deleted = FALSE
+                        """,
+                Timestamp.from(Instant.now()),
+                goodsId,
+                orderId
+        );
+    }
+
+    public int markSoldFromOrder(long goodsId, long orderId) {
+        return jdbcTemplate.update("""
+                        UPDATE goods
+                        SET status = 'SOLD',
+                            current_occupied_order_id = NULL,
+                            updated_at = ?
+                        WHERE id = ?
+                          AND status = 'RESERVED'
+                          AND current_occupied_order_id = ?
+                          AND is_deleted = FALSE
+                        """,
+                Timestamp.from(Instant.now()),
+                goodsId,
+                orderId
+        );
+    }
+
     public void insertAuditRecord(long goodsId, long adminId, AuditResult result, String reason, String ruleSummary) {
         jdbcTemplate.update("""
                         INSERT INTO audit_records (
