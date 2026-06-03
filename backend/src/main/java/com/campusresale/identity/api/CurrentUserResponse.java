@@ -15,9 +15,9 @@ public record CurrentUserResponse(
         String nickname,
         /** 当前用户角色 code 列表，已排序方便前端稳定展示。 */
         List<String> roles,
-        /** 校园认证状态；B 成员认证表合并前由 VERIFIED_STUDENT 角色过渡推导。 */
+        /** 校园认证状态；由校园认证记录解析，未提交认证时为 NONE。 */
         String verificationStatus,
-        /** 是否具备完整交易权限；M1 过渡期 VERIFIED_STUDENT 即为 true。 */
+        /** 是否具备完整交易权限；需要角色、认证状态、认证分数和证件因子共同满足。 */
         boolean canTrade
 ) {
 }
