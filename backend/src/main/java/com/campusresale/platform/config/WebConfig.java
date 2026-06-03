@@ -23,7 +23,7 @@ public class WebConfig implements WebMvcConfigurer {
     private final OriginCsrfInterceptor originCsrfInterceptor;
 
     /**
-     * 权限拦截器：负责识别 @RequireLogin 和 @RequireRole。
+     * 权限拦截器：负责识别 @RequireLogin、@RequireRole 和 @RequireTradeEligible。
      */
     private final AuthorizationInterceptor authorizationInterceptor;
 
@@ -55,7 +55,7 @@ public class WebConfig implements WebMvcConfigurer {
     }
 
     /**
-     * 注册 MVC 拦截器；顺序很重要：先做 CSRF 来源校验，再做登录/角色校验。
+     * 注册 MVC 拦截器；顺序很重要：先做 CSRF 来源校验，再做登录、角色和交易资格校验。
      */
     @Override
     public void addInterceptors(InterceptorRegistry registry) {

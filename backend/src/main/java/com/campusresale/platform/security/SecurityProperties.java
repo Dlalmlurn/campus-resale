@@ -12,7 +12,7 @@ public final class SecurityProperties {
     /** 普通注册用户角色。 */
     public static final String REGISTERED_USER_ROLE = "REGISTERED_USER";
 
-    /** 已认证学生角色；M1 过渡期用于推导 canTrade=true。 */
+    /** 已认证学生角色；完整交易资格还需要校园认证规则共同判定。 */
     public static final String VERIFIED_STUDENT_ROLE = "VERIFIED_STUDENT";
 
     /** 内容管理员角色；按用户要求允许多端登录。 */

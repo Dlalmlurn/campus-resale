@@ -1,3 +1,4 @@
+// 文件功能：提供商品草稿、提交审核、我的商品、公开列表和商品详情 API。
 package com.campusresale.goods;
 
 import com.campusresale.goods.GoodsRequests.UpsertRequest;
@@ -6,6 +7,7 @@ import com.campusresale.platform.api.PageResponse;
 import com.campusresale.platform.security.CurrentPrincipal;
 import com.campusresale.platform.security.CurrentPrincipalContext;
 import com.campusresale.platform.security.RequireLogin;
+import com.campusresale.platform.security.RequireTradeEligible;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.math.BigDecimal;
@@ -28,7 +30,7 @@ public class GoodsController {
         this.goodsService = goodsService;
     }
 
-    @RequireLogin
+    @RequireTradeEligible
     @PostMapping("/drafts")
     public GoodsSummary createDraft(
             @Valid @RequestBody UpsertRequest request,
@@ -47,7 +49,7 @@ public class GoodsController {
         return goodsService.update(id, principal(servletRequest), request);
     }
 
-    @RequireLogin
+    @RequireTradeEligible
     @PostMapping("/{id}/submit")
     public GoodsSummary submit(@PathVariable long id, HttpServletRequest servletRequest) {
         return goodsService.submit(id, principal(servletRequest));

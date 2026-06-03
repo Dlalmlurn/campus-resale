@@ -1,19 +1,29 @@
-// 文件功能：读取权限注解并统一执行登录和角色校验。
+// 文件功能：读取权限注解并统一执行登录、角色和交易资格校验。
 package com.campusresale.platform.security;
 
 import com.campusresale.platform.api.ApiExceptions;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.stereotype.Component;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 /**
- * 注解式权限拦截器，统一执行 @RequireLogin 和 @RequireRole，避免 Controller 手写重复鉴权。
+ * 注解式权限拦截器，统一执行 @RequireLogin、@RequireRole 和 @RequireTradeEligible，避免 Controller 手写重复鉴权。
  */
 @Component
 public class AuthorizationInterceptor implements HandlerInterceptor {
+
+    /**
+     * 交易资格检查器：由 identity.verification 模块提供具体 canTrade 规则。
+     */
+    private final TradeEligibilityChecker tradeEligibilityChecker;
+
+    public AuthorizationInterceptor(ObjectProvider<TradeEligibilityChecker> tradeEligibilityCheckerProvider) {
+        this.tradeEligibilityChecker = tradeEligibilityCheckerProvider.getIfAvailable();
+    }
 
     /**
      * Controller 方法执行前做权限判断。
@@ -30,12 +40,13 @@ public class AuthorizationInterceptor implements HandlerInterceptor {
             return true;
         }
 
-        // requireRole 表示“需要任意一个指定角色”，requireLogin 表示“只需要登录”。
+        // requireRole 表示“需要任意一个指定角色”，requireTradeEligible 表示“需要完整交易资格”。
         RequireRole requireRole = findAnnotation(handlerMethod, RequireRole.class);
+        RequireTradeEligible requireTradeEligible = findAnnotation(handlerMethod, RequireTradeEligible.class);
         RequireLogin requireLogin = findAnnotation(handlerMethod, RequireLogin.class);
 
         // 方法和类上都没有权限注解时，保持公开访问。
-        if (requireRole == null && requireLogin == null) {
+        if (requireRole == null && requireTradeEligible == null && requireLogin == null) {
             return true;
         }
 
@@ -48,7 +59,20 @@ public class AuthorizationInterceptor implements HandlerInterceptor {
             throw ApiExceptions.forbidden("当前账号无权执行该操作");
         }
 
+        // 交易型接口统一检查 canTrade，避免订单、会话、商品模块各自复制判断。
+        if (requireTradeEligible != null && !canTrade(principal)) {
+            throw ApiExceptions.forbidden("当前账号尚未具备完整交易权限");
+        }
+
         return true;
+    }
+
+    private boolean canTrade(CurrentPrincipal principal) {
+        if (tradeEligibilityChecker == null) {
+            // 正常应用启动时应由身份认证模块注入实现；这里给出明确失败原因，便于集成排查。
+            throw ApiExceptions.forbidden("交易资格检查组件尚未配置");
+        }
+        return tradeEligibilityChecker.canTrade(principal);
     }
 
     /**
