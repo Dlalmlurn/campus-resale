@@ -342,6 +342,12 @@ public class FileService {
             }
             return VisibilityScope.PRIVATE;
         }
+        if (fileKind == FileKind.ORDER_EVIDENCE) {
+            if (requestedScope != null && requestedScope != VisibilityScope.PRIVATE) {
+                throw ApiExceptions.validation("订单证据文件必须为 PRIVATE", Map.of("field", "visibilityScope"));
+            }
+            return VisibilityScope.PRIVATE;
+        }
         if (requestedScope == null) {
             return VisibilityScope.PUBLIC;
         }

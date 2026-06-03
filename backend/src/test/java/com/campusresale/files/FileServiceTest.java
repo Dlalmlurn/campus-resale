@@ -68,6 +68,47 @@ class FileServiceTest {
     }
 
     @Test
+    void uploadForcesOrderEvidenceToPrivate() {
+        when(systemConfigRepository.intValue("campus.auth.material_max_mb", 5)).thenReturn(5);
+        when(fileRepository.create(
+                eq("bucket"),
+                any(),
+                eq("meetup.png"),
+                eq("image/png"),
+                eq((long) pngBytes().length),
+                any(),
+                eq(FileKind.ORDER_EVIDENCE),
+                eq(VisibilityScope.PRIVATE),
+                eq(1L)
+        )).thenReturn(record(FileKind.ORDER_EVIDENCE, VisibilityScope.PRIVATE, 1L));
+
+        StoredFileSummary summary = fileService.upload(
+                new MockMultipartFile("file", "meetup.png", "image/png", pngBytes()),
+                FileKind.ORDER_EVIDENCE,
+                null,
+                principal(1L, Set.of("REGISTERED_USER"))
+        );
+
+        assertThat(summary.visibilityScope()).isEqualTo("PRIVATE");
+        verify(objectStorageClient).putObject(any(), any(byte[].class), eq("image/png"));
+    }
+
+    @Test
+    void rejectsPublicOrderEvidence() {
+        when(systemConfigRepository.intValue("campus.auth.material_max_mb", 5)).thenReturn(5);
+
+        assertThatThrownBy(() -> fileService.upload(
+                new MockMultipartFile("file", "meetup.png", "image/png", pngBytes()),
+                FileKind.ORDER_EVIDENCE,
+                VisibilityScope.PUBLIC,
+                principal(1L, Set.of("REGISTERED_USER"))
+        )).isInstanceOfSatisfying(ApiException.class,
+                exception -> assertThat(exception.code()).isEqualTo("VALIDATION_FAILED"));
+
+        verify(objectStorageClient, never()).putObject(any(), any(), any());
+    }
+
+    @Test
     void rejectsMismatchedDeclaredContentType() {
         when(systemConfigRepository.intValue("campus.auth.material_max_mb", 5)).thenReturn(5);
 
