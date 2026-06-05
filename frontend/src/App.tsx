@@ -2,6 +2,7 @@ import {
   ArrowLeft,
   BadgeCheck,
   BookOpen,
+  BarChart3,
   Check,
   ChevronRight,
   ClipboardList,
@@ -15,6 +16,7 @@ import {
   RefreshCw,
   Search,
   ShieldCheck,
+  ShieldAlert,
   ShoppingBag,
   Store,
   UserRound,
@@ -54,6 +56,8 @@ import type {
   TagSummary
 } from "./api/types";
 import { OrderDetailPage, OrdersPage } from "./pages/orders";
+import { AdminDashboardPage } from "./pages/admin-dashboard";
+import { AdminAuditLogsPage } from "./pages/admin-audit-logs";
 
 type Route =
   | { name: "market" }
@@ -747,7 +751,7 @@ function SellerPage(props: { catalog: Catalog; notify: Notify }) {
 }
 
 function AdminPage(props: { notify: Notify }) {
-  const [tab, setTab] = useState<"verification" | "goods">("verification");
+  const [tab, setTab] = useState<"verification" | "goods" | "dashboard" | "audit">("dashboard");
   const [verifications, setVerifications] = useState<CampusVerification[]>([]);
   const [goods, setGoods] = useState<GoodsSummary[]>([]);
   const [busy, setBusy] = useState(false);
@@ -765,7 +769,12 @@ function AdminPage(props: { notify: Notify }) {
     }
   }, [props.notify]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    // 审核队列只在进入 verification/goods tab 时加载，避免看板页不必要的请求
+    if (tab === "verification" || tab === "goods") {
+      void load();
+    }
+  }, [load, tab]);
 
   const review = async (kind: "verification" | "goods", id: number, action: "approve" | "reject") => {
     const reason = window.prompt(action === "approve" ? "填写审核备注（可选）" : "填写驳回原因", "") ?? "";
@@ -782,28 +791,73 @@ function AdminPage(props: { notify: Notify }) {
     }
   };
 
-  const records = tab === "verification" ? verifications : goods;
   return (
     <section>
-      <PageHeading eyebrow="管理后台" title="审核队列" text="集中处理校园认证和商品上架申请。" />
-      <div className="segmented-control admin-tabs">
-        <button className={tab === "verification" ? "active" : ""} type="button" onClick={() => setTab("verification")}>校园认证 <b>{verifications.length}</b></button>
-        <button className={tab === "goods" ? "active" : ""} type="button" onClick={() => setTab("goods")}>商品审核 <b>{goods.length}</b></button>
+      {/* 顶部 Tab 导航 —— 4 个功能区 */}
+      <div className="segmented-control admin-tabs admin-tabs--wide">
+        <button
+          className={tab === "dashboard" ? "active" : ""}
+          type="button"
+          onClick={() => setTab("dashboard")}
+        >
+          <BarChart3 size={15} /> 数据看板
+        </button>
+        <button
+          className={tab === "verification" ? "active" : ""}
+          type="button"
+          onClick={() => setTab("verification")}
+        >
+          <ShieldCheck size={15} /> 校园认证
+          {verifications.length > 0 && <b>{verifications.length}</b>}
+        </button>
+        <button
+          className={tab === "goods" ? "active" : ""}
+          type="button"
+          onClick={() => setTab("goods")}
+        >
+          <ShieldCheck size={15} /> 商品审核
+          {goods.length > 0 && <b>{goods.length}</b>}
+        </button>
+        <button
+          className={tab === "audit" ? "active" : ""}
+          type="button"
+          onClick={() => setTab("audit")}
+        >
+          <ShieldAlert size={15} /> 审计日志
+        </button>
       </div>
-      <div className="review-list">
-        {records.length === 0 ? <EmptyBlock title="当前没有待审核记录" /> : tab === "verification"
-          ? verifications.map((item) => <article className="review-row" key={item.id}>
-            <div><strong>{item.realName} · {item.studentNo}</strong><p>{item.department} · {item.campusEmail}</p></div>
-            <div className="review-meta"><span className="score">{item.score} 分</span><StatusBadge value={item.status} labels={verificationStatusLabels} /></div>
-            <ReviewActions disabled={busy} onApprove={() => void review("verification", item.id!, "approve")} onReject={() => void review("verification", item.id!, "reject")} />
-          </article>)
-          : goods.map((item) => <article className="review-row" key={item.id}>
-            <div><strong>{item.title}</strong><p>{item.category.name} · {item.seller.nickname} · ¥{item.listPrice}</p></div>
-            <div className="review-meta"><StatusBadge value={item.status} labels={goodsStatusLabels} /><StatusBadge value={item.auditStatus} labels={auditStatusLabels} /></div>
-            <ReviewActions disabled={busy} onApprove={() => void review("goods", item.id, "approve")} onReject={() => void review("goods", item.id, "reject")} />
-          </article>)
-        }
-      </div>
+
+      {/* 数据看板 */}
+      {tab === "dashboard" && <AdminDashboardPage notify={props.notify} />}
+
+      {/* 审计日志 */}
+      {tab === "audit" && <AdminAuditLogsPage notify={props.notify} />}
+
+      {/* 审核队列 */}
+      {(tab === "verification" || tab === "goods") && (
+        <div className="review-list">
+          {tab === "verification" && (verifications.length === 0
+            ? <EmptyBlock title="当前没有待审核的认证记录" />
+            : verifications.map((item) => (
+              <article className="review-row" key={item.id}>
+                <div><strong>{item.realName} · {item.studentNo}</strong><p>{item.department} · {item.campusEmail}</p></div>
+                <div className="review-meta"><span className="score">{item.score} 分</span><StatusBadge value={item.status} labels={verificationStatusLabels} /></div>
+                <ReviewActions disabled={busy} onApprove={() => void review("verification", item.id!, "approve")} onReject={() => void review("verification", item.id!, "reject")} />
+              </article>
+            ))
+          )}
+          {tab === "goods" && (goods.length === 0
+            ? <EmptyBlock title="当前没有待审核的商品" />
+            : goods.map((item) => (
+              <article className="review-row" key={item.id}>
+                <div><strong>{item.title}</strong><p>{item.category.name} · {item.seller.nickname} · ¥{item.listPrice}</p></div>
+                <div className="review-meta"><StatusBadge value={item.status} labels={goodsStatusLabels} /><StatusBadge value={item.auditStatus} labels={auditStatusLabels} /></div>
+                <ReviewActions disabled={busy} onApprove={() => void review("goods", item.id, "approve")} onReject={() => void review("goods", item.id, "reject")} />
+              </article>
+            ))
+          )}
+        </div>
+      )}
     </section>
   );
 }
