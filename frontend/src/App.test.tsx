@@ -12,6 +12,24 @@ const registeredUser: CurrentUser = {
   canTrade: false
 };
 
+const verifiedBuyer: CurrentUser = {
+  id: 31,
+  username: "buyer_demo",
+  nickname: "买家同学",
+  roles: ["REGISTERED_USER", "VERIFIED_STUDENT"],
+  verificationStatus: "APPROVED",
+  canTrade: true
+};
+
+const verifiedSeller: CurrentUser = {
+  id: 11,
+  username: "seller_demo",
+  nickname: "小林同学",
+  roles: ["REGISTERED_USER", "VERIFIED_STUDENT"],
+  verificationStatus: "APPROVED",
+  canTrade: true
+};
+
 describe("App", () => {
   beforeEach(() => {
     window.location.hash = "#/market";
@@ -56,11 +74,55 @@ describe("App", () => {
     expect(screen.queryByText("发布商品")).not.toBeInTheDocument();
     expect(screen.getByText("完成校园认证后才能发布商品")).toBeInTheDocument();
   });
+
+  it("shows an orders workspace for authenticated trade users", async () => {
+    stubBackend(verifiedBuyer);
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByText("买家同学")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "订单" }));
+
+    await waitFor(() => expect(screen.getByText("我的订单")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "我买到的" })).toBeInTheDocument();
+    expect(screen.getByText("机械键盘 87 键茶轴")).toBeInTheDocument();
+    expect(screen.getByText("我是买家")).toBeInTheDocument();
+  });
+
+  it("creates an order from goods detail and opens the order detail", async () => {
+    stubBackend(verifiedBuyer);
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByText("数据库原理教材")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("数据库原理教材"));
+    await waitFor(() => expect(screen.getByRole("button", { name: "立即下单" })).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "立即下单" }));
+    fireEvent.change(screen.getByLabelText("交易地点"), { target: { value: "1" } });
+    fireEvent.change(screen.getByLabelText("见面时间"), { target: { value: "2026-06-10T18:30" } });
+    fireEvent.change(screen.getByLabelText("给卖家的备注"), { target: { value: "图书馆门口见" } });
+    fireEvent.click(screen.getByRole("button", { name: "提交订单" }));
+
+    await waitFor(() => expect(window.location.hash).toBe("#/orders/77"));
+    expect(screen.getAllByText("等待卖家确认").length).toBeGreaterThan(0);
+  });
+
+  it("lets sellers confirm pending orders from the order detail action panel", async () => {
+    window.location.hash = "#/orders/77";
+    stubBackend(verifiedSeller);
+    render(<App />);
+
+    await waitFor(() => expect(screen.getAllByText("等待卖家确认").length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole("button", { name: "确认接单" }));
+
+    await waitFor(() => expect(screen.getByText("等待买家支付")).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: "确认接单" })).not.toBeInTheDocument();
+  });
 });
 
 function stubBackend(currentUser?: CurrentUser) {
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
+    const path = url.replace(/^http:\/\/localhost/, "");
     if (url === "/api/auth/me") {
       return currentUser
         ? response(currentUser)
@@ -72,6 +134,37 @@ function stubBackend(currentUser?: CurrentUser) {
     if (url === "/api/verifications/me") {
       return response({ id: null, realName: null, studentNo: null, department: null, campusEmail: null, score: 0, status: "NONE", factors: [] });
     }
+    if (url === "/api/goods/10") {
+      return response({
+        id: 10,
+        title: "数据库原理教材",
+        description: "少量笔记，适合复习。",
+        conditionLevel: "LIGHTLY_USED",
+        listPrice: "28.00",
+        status: "ON_SALE",
+        auditStatus: "APPROVED",
+        seller: { id: 11, nickname: "小林同学" },
+        category: { id: 1, code: "BOOKS", name: "教材资料" },
+        primaryImage: null,
+        publishedAt: "2026-05-25T00:00:00Z"
+      });
+    }
+    if (url === "/api/orders?page=1&pageSize=20") return response({ items: [pendingOrder()], page: 1, pageSize: 20, total: 1 });
+    if (url === "/api/orders/77") return response(pendingOrder());
+    if (url === "/api/orders/77/reviews") return response([]);
+    if (url === "/api/orders/77/payment") return response({
+      id: 501,
+      paymentNo: "PAY202606050001",
+      orderId: 77,
+      amount: "129.00",
+      status: "PENDING",
+      provider: "SIMULATED_ESCROW",
+      createdAt: "2026-06-05T10:00:00Z",
+      paidAt: null,
+      closedAt: null
+    });
+    if (url === "/api/orders/77/seller-confirm") return response({ ...pendingOrder(), status: "PENDING_PAYMENT" });
+    if (url === "/api/orders" || path === "/api/orders") return response(pendingOrder());
     if (url.startsWith("/api/goods?")) {
       return response({
         items: [{
@@ -94,6 +187,28 @@ function stubBackend(currentUser?: CurrentUser) {
     }
     return response({ code: "NOT_FOUND", message: "未找到", details: {} }, 404);
   }));
+}
+
+function pendingOrder() {
+  return {
+    id: 77,
+    orderNo: "O202606050001",
+    goodsId: 10,
+    goodsTitle: "机械键盘 87 键茶轴",
+    primaryImageFileId: null,
+    buyer: { id: 31, nickname: "买家同学" },
+    seller: { id: 11, nickname: "小林同学" },
+    frozenAmount: "129.00",
+    status: "PENDING_SELLER_CONFIRM",
+    tradePlaceId: 1,
+    tradePlaceName: "图书馆正门",
+    tradePlaceDetail: "入口处",
+    meetupTime: "2026-06-10T18:30:00Z",
+    buyerNote: "图书馆门口见",
+    createdAt: "2026-06-05T10:00:00Z",
+    updatedAt: "2026-06-05T10:00:00Z",
+    closedAt: null
+  };
 }
 
 function response(body: unknown, status = 200) {

@@ -4,6 +4,7 @@ import {
   BookOpen,
   Check,
   ChevronRight,
+  ClipboardList,
   ClipboardCheck,
   FileUp,
   Filter,
@@ -41,6 +42,7 @@ import {
   updateVerification,
   uploadFile
 } from "./api/m1";
+import { createOrder } from "./api/orders";
 import type {
   CampusPlaceSummary,
   CampusVerification,
@@ -51,10 +53,13 @@ import type {
   StoredFileSummary,
   TagSummary
 } from "./api/types";
+import { OrderDetailPage, OrdersPage } from "./pages/orders";
 
 type Route =
   | { name: "market" }
   | { name: "goods"; id: number }
+  | { name: "orders" }
+  | { name: "order"; id: number }
   | { name: "auth" }
   | { name: "verification" }
   | { name: "seller" }
@@ -101,6 +106,7 @@ const verificationStatusLabels: Record<string, string> = {
 export function App() {
   const [route, setRoute] = useState<Route>(() => parseRoute());
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [catalog, setCatalog] = useState<Catalog>(emptyCatalog);
   const [publicGoods, setPublicGoods] = useState<GoodsSummary[]>([]);
   const [goodsTotal, setGoodsTotal] = useState(0);
@@ -150,7 +156,8 @@ export function App() {
         if (!(error instanceof ApiError) || error.code !== "AUTH_REQUIRED") {
           notify("error", messageOf(error));
         }
-      });
+      })
+      .finally(() => setAuthChecked(true));
     void getCatalog()
       .then(setCatalog)
       .catch((error) => notify("error", messageOf(error)));
@@ -161,14 +168,19 @@ export function App() {
   }, [refreshGoods]);
 
   useEffect(() => {
+    if ((route.name === "orders" || route.name === "order") && authChecked && currentUser === null) {
+      notify("error", "请先登录后继续");
+      navigate({ name: "auth" });
+      return;
+    }
     if (route.name === "seller" && currentUser && !currentUser.canTrade) {
       notify("error", "完成校园认证后才能发布商品");
       navigate({ name: "verification" });
     }
-  }, [currentUser, navigate, notify, route.name]);
+  }, [authChecked, currentUser, navigate, notify, route.name]);
 
   const guardedNavigate = (next: Route) => {
-    if (!currentUser && (next.name === "verification" || next.name === "seller" || next.name === "admin")) {
+    if (!currentUser && (next.name === "verification" || next.name === "seller" || next.name === "admin" || next.name === "orders" || next.name === "order")) {
       notify("error", "请先登录后继续");
       navigate({ name: "auth" });
       return;
@@ -196,6 +208,16 @@ export function App() {
     }
   };
 
+  const handleDemoLogin = async (username: string) => {
+    try {
+      const user = await login(username, "demo-password");
+      setCurrentUser(user);
+      notify("success", `已切换到${user.nickname}`);
+    } catch (error) {
+      notify("error", messageOf(error));
+    }
+  };
+
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -208,6 +230,7 @@ export function App() {
         </button>
         <nav className="main-nav" aria-label="主要导航">
           <NavButton active={route.name === "market"} icon={<Home size={17} />} label="商品" onClick={() => navigate({ name: "market" })} />
+          <NavButton active={route.name === "orders" || route.name === "order"} icon={<ClipboardList size={17} />} label="订单" onClick={() => guardedNavigate({ name: "orders" })} />
           <NavButton active={route.name === "seller"} icon={<PackagePlus size={17} />} label="发布" onClick={() => guardedNavigate({ name: "seller" })} />
           <NavButton active={route.name === "verification"} icon={<BadgeCheck size={17} />} label="认证" onClick={() => guardedNavigate({ name: "verification" })} />
           {isAdmin(currentUser) && (
@@ -215,6 +238,13 @@ export function App() {
           )}
         </nav>
         <div className="account-area">
+          {import.meta.env.DEV && (
+            <div className="demo-switcher" aria-label="演示账号切换">
+              <button type="button" onClick={() => void handleDemoLogin("buyer_demo")}>买家</button>
+              <button type="button" onClick={() => void handleDemoLogin("seller_demo")}>卖家</button>
+              <button type="button" onClick={() => void handleDemoLogin("content_admin")}>管理员</button>
+            </div>
+          )}
           {currentUser ? (
             <>
               <div className="account-copy">
@@ -250,7 +280,9 @@ export function App() {
             onOpen={(id) => navigate({ name: "goods", id })}
           />
         )}
-        {route.name === "goods" && <GoodsDetailPage id={route.id} onBack={() => navigate({ name: "market" })} notify={notify} />}
+        {route.name === "goods" && <GoodsDetailPage id={route.id} catalog={catalog} currentUser={currentUser} navigate={navigate} onBack={() => navigate({ name: "market" })} notify={notify} />}
+        {route.name === "orders" && currentUser && <OrdersPage currentUser={currentUser} notify={notify} onOpenOrder={(id) => navigate({ name: "order", id })} />}
+        {route.name === "order" && currentUser && <OrderDetailPage id={route.id} currentUser={currentUser} notify={notify} onBack={() => navigate({ name: "orders" })} />}
         {route.name === "auth" && <AuthPage currentUser={currentUser} onAuthenticated={setCurrentUser} navigate={navigate} notify={notify} />}
         {route.name === "verification" && currentUser && <VerificationPage currentUser={currentUser} onUserChange={setCurrentUser} notify={notify} />}
         {route.name === "seller" && currentUser?.canTrade && <SellerPage catalog={catalog} notify={notify} />}
@@ -327,9 +359,17 @@ function MarketPage(props: {
   );
 }
 
-function GoodsDetailPage(props: { id: number; onBack: () => void; notify: Notify }) {
+function GoodsDetailPage(props: { id: number; catalog: Catalog; currentUser: CurrentUser | null; navigate: (route: Route) => void; onBack: () => void; notify: Notify }) {
   const [item, setItem] = useState<GoodsSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [orderOpen, setOrderOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [orderForm, setOrderForm] = useState({
+    tradePlaceId: "",
+    tradePlaceDetail: "",
+    meetupTime: "",
+    note: ""
+  });
 
   useEffect(() => {
     void getGoodsDetail(props.id)
@@ -340,6 +380,44 @@ function GoodsDetailPage(props: { id: number; onBack: () => void; notify: Notify
 
   if (loading) return <LoadingBlock />;
   if (!item) return <EmptyBlock title="商品不存在或暂不可见" />;
+
+  const openOrder = () => {
+    if (!props.currentUser) {
+      props.notify("error", "请先登录后继续");
+      props.navigate({ name: "auth" });
+      return;
+    }
+    if (!props.currentUser.canTrade) {
+      props.notify("error", "完成校园认证后才能下单");
+      props.navigate({ name: "verification" });
+      return;
+    }
+    if (props.currentUser.id === item.seller.id) {
+      props.notify("error", "不能购买自己发布的商品");
+      return;
+    }
+    setOrderOpen(true);
+  };
+
+  const submitOrder = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    try {
+      const created = await createOrder({
+        goodsId: item.id,
+        tradePlaceId: Number(orderForm.tradePlaceId) || null,
+        tradePlaceDetail: orderForm.tradePlaceDetail,
+        meetupTime: orderForm.meetupTime ? new Date(orderForm.meetupTime).toISOString() : null,
+        note: orderForm.note
+      });
+      props.notify("success", "订单已提交，等待卖家确认");
+      props.navigate({ name: "order", id: created.id });
+    } catch (error) {
+      props.notify("error", messageOf(error));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <section className="detail-layout">
@@ -359,6 +437,34 @@ function GoodsDetailPage(props: { id: number; onBack: () => void; notify: Notify
             <div><dt>卖家</dt><dd>{item.seller.nickname}</dd></div>
             <div><dt>发布时间</dt><dd>{formatDate(item.publishedAt)}</dd></div>
           </dl>
+          <div className="order-entry">
+            <button className="primary-button" type="button" onClick={openOrder}>立即下单</button>
+            <button className="secondary-button" type="button" onClick={() => props.navigate({ name: "orders" })}>查看我的订单</button>
+          </div>
+          {orderOpen && (
+            <form className="form-panel order-compose" onSubmit={(event) => void submitOrder(event)}>
+              <div className="panel-title"><h2>确认交易约定</h2></div>
+              <FormField label="交易地点">
+                <select required value={orderForm.tradePlaceId} onChange={(event) => setOrderForm({ ...orderForm, tradePlaceId: event.target.value })}>
+                  <option value="">请选择</option>
+                  {props.catalog.places.map((place) => <option value={place.id} key={place.id}>{place.campus} · {place.name}</option>)}
+                </select>
+              </FormField>
+              <FormField label="地点补充">
+                <input value={orderForm.tradePlaceDetail} onChange={(event) => setOrderForm({ ...orderForm, tradePlaceDetail: event.target.value })} placeholder="例如：图书馆正门台阶旁" />
+              </FormField>
+              <FormField label="见面时间">
+                <input required type="datetime-local" value={orderForm.meetupTime} onChange={(event) => setOrderForm({ ...orderForm, meetupTime: event.target.value })} />
+              </FormField>
+              <FormField label="给卖家的备注">
+                <textarea rows={3} value={orderForm.note} onChange={(event) => setOrderForm({ ...orderForm, note: event.target.value })} placeholder="补充取货说明或联系方式" />
+              </FormField>
+              <div className="button-row">
+                <button className="primary-button" disabled={busy} type="submit">提交订单</button>
+                <button className="secondary-button" disabled={busy} type="button" onClick={() => setOrderOpen(false)}>取消</button>
+              </div>
+            </form>
+          )}
         </div>
       </div>
     </section>
@@ -740,12 +846,15 @@ function EmptyBlock({ title }: { title: string }) {
 function parseRoute(): Route {
   const value = window.location.hash.replace(/^#\/?/, "") || "market";
   if (value.startsWith("goods/")) return { name: "goods", id: Number(value.split("/")[1]) };
-  if (["market", "auth", "verification", "seller", "admin"].includes(value)) return { name: value as Route["name"] } as Route;
+  if (value.startsWith("orders/")) return { name: "order", id: Number(value.split("/")[1]) };
+  if (["market", "orders", "auth", "verification", "seller", "admin"].includes(value)) return { name: value as Route["name"] } as Route;
   return { name: "market" };
 }
 
 function routeHash(route: Route) {
-  return route.name === "goods" ? `#/goods/${route.id}` : `#/${route.name}`;
+  if (route.name === "goods") return `#/goods/${route.id}`;
+  if (route.name === "order") return `#/orders/${route.id}`;
+  return `#/${route.name}`;
 }
 
 function isAdmin(user: CurrentUser | null) {

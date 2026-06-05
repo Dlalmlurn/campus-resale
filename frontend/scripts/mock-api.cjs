@@ -4,6 +4,9 @@ const port = 8080;
 let currentUser = null;
 let nextFileId = 900;
 let nextGoodsId = 30;
+let nextOrderId = 77;
+let nextCompletionId = 300;
+let nextReviewId = 700;
 
 const categories = [
   { id: 1, code: "DIGITAL", name: "数码设备" },
@@ -88,6 +91,64 @@ let verification = {
   factors: [{ factorType: "STUDENT_CARD", status: "VERIFIED", scoreValue: 80, fileIds: [800] }]
 };
 
+const users = {
+  content_admin: {
+    id: 1,
+    username: "content_admin",
+    nickname: "内容管理员",
+    roles: ["CONTENT_ADMIN"],
+    verificationStatus: "NONE",
+    canTrade: false
+  },
+  buyer_demo: {
+    id: 31,
+    username: "buyer_demo",
+    nickname: "买家同学",
+    roles: ["REGISTERED_USER", "VERIFIED_STUDENT"],
+    verificationStatus: "APPROVED",
+    canTrade: true
+  },
+  seller_demo: {
+    id: 11,
+    username: "seller_demo",
+    nickname: "小林同学",
+    roles: ["REGISTERED_USER", "VERIFIED_STUDENT"],
+    verificationStatus: "APPROVED",
+    canTrade: true
+  },
+  student_demo: {
+    id: 21,
+    username: "student_demo",
+    nickname: "示例同学",
+    roles: ["REGISTERED_USER", "VERIFIED_STUDENT"],
+    verificationStatus: "APPROVED",
+    canTrade: true
+  }
+};
+
+const payments = new Map();
+const completionRequests = new Map();
+const reviews = new Map();
+const orders = [{
+  id: 76,
+  orderNo: "O202606050000",
+  goodsId: 1,
+  goodsTitle: goods[0].title,
+  primaryImageFileId: null,
+  buyer: { id: 31, nickname: "买家同学" },
+  seller: { id: 11, nickname: "小林同学" },
+  frozenAmount: goods[0].listPrice,
+  status: "PENDING_SELLER_CONFIRM",
+  tradePlaceId: 1,
+  tradePlaceName: places[0].name,
+  tradePlaceDetail: places[0].detail,
+  meetupTime: "2026-06-10T18:30:00",
+  buyerNote: "图书馆门口见",
+  createdAt: "2026-06-05T10:00:00",
+  updatedAt: "2026-06-05T10:00:00",
+  closedAt: null
+}];
+
 function send(response, status, payload) {
   response.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
   response.end(JSON.stringify(payload));
@@ -112,17 +173,7 @@ function page(items) {
 }
 
 function userFor(username) {
-  const isAdmin = username === "content_admin";
-  const isVerifiedStudent = username === "student_demo";
-  if (!isAdmin && !isVerifiedStudent) return registeredUserFor(username);
-  return {
-    id: isAdmin ? 1 : 21,
-    username,
-    nickname: isAdmin ? "内容管理员" : "示例同学",
-    roles: isAdmin ? ["CONTENT_ADMIN"] : ["REGISTERED_USER", "VERIFIED_STUDENT"],
-    verificationStatus: isVerifiedStudent ? "APPROVED" : "NONE",
-    canTrade: isVerifiedStudent
-  };
+  return users[username] ?? registeredUserFor(username);
 }
 
 function registeredUserFor(username) {
@@ -165,6 +216,152 @@ const server = http.createServer(async (request, response) => {
 
   if (request.method === "GET" && path === "/api/goods/mine") return send(response, 200, page(goods.slice(0, 1)));
   if (request.method === "GET" && /^\/api\/goods\/\d+$/.test(path)) return send(response, 200, goods.find((item) => item.id === Number(path.split("/").at(-1))) ?? goods[0]);
+
+  if (request.method === "GET" && path === "/api/orders") {
+    if (!currentUser) return send(response, 401, { code: "AUTH_REQUIRED", message: "请先登录" });
+    const visible = orders.filter((order) => order.buyer.id === currentUser.id || order.seller.id === currentUser.id);
+    return send(response, 200, page(visible));
+  }
+
+  if (request.method === "POST" && path === "/api/orders") {
+    if (!currentUser?.canTrade) return send(response, 403, { code: "TRADE_ELIGIBILITY_REQUIRED", message: "完成校园认证后才能交易" });
+    const body = await readJson(request);
+    const item = goods.find((entry) => entry.id === Number(body.goodsId));
+    if (!item) return send(response, 404, { code: "NOT_FOUND", message: "商品不存在" });
+    if (item.seller.id === currentUser.id) return send(response, 409, { code: "SELF_TRADE_FORBIDDEN", message: "不能购买自己发布的商品" });
+    const place = places.find((entry) => entry.id === Number(body.tradePlaceId));
+    const order = {
+      id: nextOrderId++,
+      orderNo: `O${Date.now()}`,
+      goodsId: item.id,
+      goodsTitle: item.title,
+      primaryImageFileId: item.primaryImage?.id ?? null,
+      buyer: { id: currentUser.id, nickname: currentUser.nickname },
+      seller: item.seller,
+      frozenAmount: item.listPrice,
+      status: "PENDING_SELLER_CONFIRM",
+      tradePlaceId: place?.id ?? null,
+      tradePlaceName: place?.name ?? null,
+      tradePlaceDetail: body.tradePlaceDetail || place?.detail || null,
+      meetupTime: body.meetupTime,
+      buyerNote: body.note || null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      closedAt: null
+    };
+    orders.unshift(order);
+    return send(response, 200, order);
+  }
+
+  if (request.method === "GET" && /^\/api\/orders\/\d+$/.test(path)) {
+    const order = findOrder(path);
+    return order ? send(response, 200, order) : send(response, 404, { code: "NOT_FOUND", message: "订单不存在" });
+  }
+
+  if (request.method === "POST" && /^\/api\/orders\/\d+\/seller-confirm$/.test(path)) {
+    const order = findOrder(path);
+    if (!order) return send(response, 404, { code: "NOT_FOUND", message: "订单不存在" });
+    order.status = "PENDING_PAYMENT";
+    order.updatedAt = new Date().toISOString();
+    return send(response, 200, order);
+  }
+
+  if (request.method === "POST" && /^\/api\/orders\/\d+\/seller-reject$/.test(path)) {
+    const order = findOrder(path);
+    if (!order) return send(response, 404, { code: "NOT_FOUND", message: "订单不存在" });
+    order.status = "CLOSED";
+    order.closedAt = new Date().toISOString();
+    return send(response, 200, order);
+  }
+
+  if (request.method === "POST" && /^\/api\/orders\/\d+\/buyer-cancel$/.test(path)) {
+    const order = findOrder(path);
+    if (!order) return send(response, 404, { code: "NOT_FOUND", message: "订单不存在" });
+    order.status = "CANCELLED";
+    order.closedAt = new Date().toISOString();
+    return send(response, 200, order);
+  }
+
+  if (request.method === "POST" && /^\/api\/orders\/\d+\/payments\/simulate$/.test(path)) {
+    const order = findOrder(path);
+    if (!order) return send(response, 404, { code: "NOT_FOUND", message: "订单不存在" });
+    order.status = "PAID_PENDING_MEETUP";
+    order.updatedAt = new Date().toISOString();
+    const payment = {
+      id: order.id + 500,
+      paymentNo: `PAY${Date.now()}`,
+      orderId: order.id,
+      amount: order.frozenAmount,
+      status: "ESCROWED",
+      provider: "SIMULATED_ESCROW",
+      createdAt: new Date().toISOString(),
+      paidAt: new Date().toISOString(),
+      closedAt: null
+    };
+    payments.set(order.id, payment);
+    return send(response, 200, payment);
+  }
+
+  if (request.method === "GET" && /^\/api\/orders\/\d+\/payment$/.test(path)) {
+    const order = findOrder(path);
+    const payment = order ? payments.get(order.id) : null;
+    return payment ? send(response, 200, payment) : send(response, 404, { code: "NOT_FOUND", message: "支付单不存在" });
+  }
+
+  if (request.method === "POST" && /^\/api\/orders\/\d+\/completion-requests$/.test(path)) {
+    const order = findOrder(path);
+    if (!order) return send(response, 404, { code: "NOT_FOUND", message: "订单不存在" });
+    const now = new Date();
+    const requestRecord = {
+      id: nextCompletionId++,
+      orderId: order.id,
+      status: "PENDING",
+      windowStartsAt: now.toISOString(),
+      windowEndsAt: new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+      confirmedAt: null,
+      createdAt: now.toISOString()
+    };
+    completionRequests.set(order.id, requestRecord);
+    return send(response, 200, requestRecord);
+  }
+
+  if (request.method === "POST" && /^\/api\/orders\/\d+\/completion-requests\/\d+\/confirm$/.test(path)) {
+    const order = findOrder(path);
+    if (!order) return send(response, 404, { code: "NOT_FOUND", message: "订单不存在" });
+    const requestRecord = completionRequests.get(order.id);
+    if (requestRecord) {
+      requestRecord.status = "CONFIRMED";
+      requestRecord.confirmedAt = new Date().toISOString();
+    }
+    order.status = "COMPLETED_PENDING_SETTLEMENT";
+    order.updatedAt = new Date().toISOString();
+    return send(response, 200, order);
+  }
+
+  if (request.method === "GET" && /^\/api\/orders\/\d+\/reviews$/.test(path)) {
+    const order = findOrder(path);
+    return send(response, 200, order ? reviews.get(order.id) ?? [] : []);
+  }
+
+  if (request.method === "POST" && /^\/api\/orders\/\d+\/reviews$/.test(path)) {
+    const order = findOrder(path);
+    if (!order) return send(response, 404, { code: "NOT_FOUND", message: "订单不存在" });
+    const body = await readJson(request);
+    const review = {
+      id: nextReviewId++,
+      orderId: order.id,
+      reviewerId: currentUser?.id ?? order.buyer.id,
+      reviewedUserId: order.seller.id,
+      rating: Number(body.rating) || 5,
+      content: body.content || "交易顺利，物品与描述一致。",
+      status: "SUBMITTED",
+      submittedAt: new Date().toISOString(),
+      modifiedUntil: null,
+      visibleAt: null
+    };
+    reviews.set(order.id, [review, ...(reviews.get(order.id) ?? [])]);
+    return send(response, 200, review);
+  }
 
   if (request.method === "POST" && path === "/api/goods/drafts") {
     const body = await readJson(request);
@@ -238,6 +435,11 @@ const server = http.createServer(async (request, response) => {
 
   return send(response, 404, { message: `Mock API 未覆盖 ${request.method} ${path}` });
 });
+
+function findOrder(path) {
+  const id = Number(path.split("/")[3]);
+  return orders.find((order) => order.id === id);
+}
 
 server.listen(port, "127.0.0.1", () => {
   console.log(`Campus resale mock API running at http://127.0.0.1:${port}`);
