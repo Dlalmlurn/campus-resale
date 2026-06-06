@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16
+    image: docker.1ms.run/library/postgres:16
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-campus_resale}
       POSTGRES_USER: ${POSTGRES_USER:-campus_resale}
