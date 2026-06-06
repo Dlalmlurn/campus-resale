@@ -65,6 +65,7 @@ import type {
 import { OrderDetailPage, OrdersPage } from "./pages/orders";
 import { AdminDashboardPage } from "./pages/admin-dashboard";
 import { AdminAuditLogsPage } from "./pages/admin-audit-logs";
+import { GovernancePage } from "./pages/governance";
 
 type Route =
   | { name: "market" }
@@ -75,6 +76,7 @@ type Route =
   | { name: "auth" }
   | { name: "verification" }
   | { name: "seller" }
+  | { name: "governance" }
   | { name: "admin" };
 
 type Catalog = {
@@ -248,6 +250,7 @@ export function App() {
           )}
           <NavButton active={route.name === "seller"} icon={<PackagePlus size={17} />} label="发布" onClick={() => guardedNavigate({ name: "seller" })} />
           <NavButton active={route.name === "verification"} icon={<BadgeCheck size={17} />} label="认证" onClick={() => guardedNavigate({ name: "verification" })} />
+          <NavButton active={route.name === "governance"} icon={<ShieldAlert size={17} />} label="治理" onClick={() => guardedNavigate({ name: "governance" })} />
           {isAdmin(currentUser) && (
             <NavButton active={route.name === "admin"} icon={<ShieldCheck size={17} />} label="后台" onClick={() => guardedNavigate({ name: "admin" })} />
           )}

@@ -246,6 +246,61 @@ function stubBackend(currentUser?: CurrentUser) {
       closedAt: null
     });
     if (url === "/api/orders/77/seller-confirm") return response({ ...pendingOrder(), status: "PENDING_PAYMENT" });
+    if (url === "/api/n3/governance-overview") {
+      return response({
+        reports: [{
+          id: 39,
+          reporter: { id: 31, nickname: "买家同学" },
+          targetType: "GOODS",
+          targetId: 10,
+          reasonType: "FAKE_GOODS",
+          description: "商品描述与实际成色不一致，需要管理员核实。",
+          status: "PENDING",
+          priority: "NORMAL",
+          handledByAdminId: null,
+          handledAt: null,
+          handlingNote: null,
+          evidenceFileIds: [],
+          createdAt: "2026-06-05T11:20:00Z"
+        }],
+        appeals: [],
+        refunds: [],
+        favorites: [],
+        follows: [],
+        credit: {
+          userId: currentUser?.id ?? 1,
+          fulfillmentCount: 1,
+          onTimeMeetupCount: 1,
+          positiveReviewCount: 0,
+          negativeEventCount: 0,
+          publicTags: ["有完成交易记录", "暂无有效处罚"],
+          internalScore: 82,
+          internalLevel: "B",
+          recentRecords: [],
+          updatedAt: "2026-06-05T12:00:00Z"
+        },
+        adminQueue: currentUser?.roles.includes("CONTENT_ADMIN") ? {
+          pendingReports: [{
+            id: 39,
+            reporter: { id: 31, nickname: "买家同学" },
+            targetType: "GOODS",
+            targetId: 10,
+            reasonType: "FAKE_GOODS",
+            description: "商品描述与实际成色不一致，需要管理员核实。",
+            status: "PENDING",
+            priority: "NORMAL",
+            handledByAdminId: null,
+            handledAt: null,
+            handlingNote: null,
+            evidenceFileIds: [],
+            createdAt: "2026-06-05T11:20:00Z"
+          }],
+          pendingAppeals: [],
+          pendingRefunds: [],
+          activePenalties: []
+        } : null
+      });
+    }
     if (url === "/api/orders" || path === "/api/orders") return response(pendingOrder());
     if (url.startsWith("/api/goods?")) {
       return response({

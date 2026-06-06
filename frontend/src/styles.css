@@ -230,6 +230,29 @@ h2 { letter-spacing: 0; }
 .approve-button { border-color: #b8d9cd; color: var(--green-dark); background: #eff9f5; }
 .reject-button { border-color: #ecc0ba; color: var(--red); background: #fff4f1; }
 
+.governance-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.metric-tile { min-height: 112px; padding: 15px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.metric-tile span, .metric-tile small { display: block; color: var(--muted); font-size: 0.78rem; }
+.metric-tile strong { display: block; margin: 8px 0 4px; color: var(--green-dark); font-size: 1.8rem; line-height: 1; }
+.governance-layout { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(250px, 0.85fr); gap: 12px; align-items: start; }
+.governance-layout .panel-title h2, .admin-n3 .panel-title h2 { display: inline-flex; align-items: center; gap: 7px; }
+.governance-actions { display: grid; gap: 12px; }
+.inline-action { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid #e8eeeb; }
+.inline-action label { display: grid; gap: 6px; }
+.inline-action label span { display: inline-flex; align-items: center; gap: 6px; color: #475566; font-size: 0.78rem; font-weight: 800; }
+.inline-action input { min-width: 0; width: 100%; padding: 9px 10px; border: 1px solid #dbe3df; border-radius: 8px; outline: 0; background: #fbfcfb; }
+.governance-board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+.record-column { min-width: 0; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.record-column h2 { margin-bottom: 10px; font-size: 1rem; }
+.record-row { display: grid; gap: 8px; padding: 11px 0; border-top: 1px solid #e8eeeb; }
+.record-row:first-of-type { border-top: 0; }
+.record-row strong { display: block; overflow-wrap: anywhere; font-size: 0.9rem; }
+.record-row p { margin: 4px 0 0; color: var(--muted); font-size: 0.8rem; line-height: 1.55; }
+.record-row .badge { width: max-content; }
+.record-row .button-row { flex-wrap: wrap; }
+.empty-line { margin: 0; color: var(--muted); font-size: 0.84rem; }
+.admin-n3 { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
+
 .center-panel, .state-block { display: grid; place-items: center; align-content: center; gap: 10px; color: var(--muted); text-align: center; }
 .center-panel { min-height: 520px; }
 .center-panel h1, .center-panel p { margin-bottom: 0; }
@@ -266,6 +289,7 @@ h2 { letter-spacing: 0; }
   .review-row { grid-template-columns: 1fr auto; }
   .order-card { grid-template-columns: 1fr; }
   .order-timeline { grid-template-columns: 1fr; }
+  .governance-metrics, .governance-board { grid-template-columns: 1fr; }
   .review-meta { grid-column: 1; grid-row: 2; }
   .review-actions { grid-column: 2; grid-row: 1 / span 2; }
 }

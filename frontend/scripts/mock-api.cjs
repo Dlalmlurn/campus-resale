@@ -7,6 +7,9 @@ let nextGoodsId = 30;
 let nextOrderId = 77;
 let nextCompletionId = 300;
 let nextReviewId = 700;
+let nextReportId = 40;
+let nextAppealId = 60;
+let nextRefundId = 80;
 
 const categories = [
   { id: 1, code: "DIGITAL", name: "数码设备" },
@@ -129,6 +132,52 @@ const users = {
 const payments = new Map();
 const completionRequests = new Map();
 const reviews = new Map();
+const reports = [{
+  id: 39,
+  reporter: { id: 31, nickname: "买家同学" },
+  targetType: "GOODS",
+  targetId: 1,
+  reasonType: "FAKE_GOODS",
+  description: "商品描述与实际成色不一致，需要管理员核实。",
+  status: "PENDING",
+  priority: "NORMAL",
+  handledByAdminId: null,
+  handledAt: null,
+  handlingNote: null,
+  evidenceFileIds: [],
+  createdAt: "2026-06-05T11:20:00"
+}];
+const appeals = [];
+const refunds = [{
+  id: 79,
+  refundNo: "R202606050001",
+  orderId: 76,
+  paymentOrderId: null,
+  requester: { id: 31, nickname: "买家同学" },
+  amount: "50.00",
+  refundType: "PARTIAL",
+  reason: "商品配件缺失，申请部分退款。",
+  status: "PENDING",
+  decisionByAdminId: null,
+  decisionNote: null,
+  processedAt: null,
+  createdAt: "2026-06-05T12:00:00"
+}];
+const favorites = [{ id: 1, goodsId: 1, goodsTitle: goods[0].title, goodsPrice: goods[0].listPrice, seller: goods[0].seller, createdAt: "2026-06-05T12:10:00" }];
+const follows = [{ id: 1, followedUser: goods[0].seller, createdAt: "2026-06-05T12:12:00" }];
+const penalties = [{
+  id: 1,
+  user: { id: 12, nickname: "晨风" },
+  reportId: 39,
+  appealId: null,
+  penaltyType: "WARNING",
+  reason: "商品描述不完整，已提醒整改。",
+  status: "ACTIVE",
+  createdByAdminId: 1,
+  liftedByAdminId: null,
+  liftedAt: null,
+  createdAt: "2026-06-05T13:00:00"
+}];
 const orders = [{
   id: 76,
   orderNo: "O202606050000",
@@ -623,12 +672,206 @@ const server = http.createServer(async (request, response) => {
     return send(response, 200, item);
   }
 
+  if (request.method === "GET" && path === "/api/n3/governance-overview") {
+    if (!currentUser) return send(response, 401, { code: "AUTH_REQUIRED", message: "请先登录" });
+    return send(response, 200, governanceOverview());
+  }
+
+  if (request.method === "POST" && path === "/api/n3/reports") {
+    if (!currentUser) return send(response, 401, { code: "AUTH_REQUIRED", message: "请先登录" });
+    const body = await readJson(request);
+    const report = {
+      id: nextReportId++,
+      reporter: { id: currentUser.id, nickname: currentUser.nickname },
+      targetType: body.targetType || "GOODS",
+      targetId: Number(body.targetId) || 1,
+      reasonType: body.reasonType || "FRAUD",
+      description: body.description || "需要管理员核实。",
+      status: "PENDING",
+      priority: body.reasonType === "FRAUD" ? "HIGH" : "NORMAL",
+      handledByAdminId: null,
+      handledAt: null,
+      handlingNote: null,
+      evidenceFileIds: body.evidenceFileIds || [],
+      createdAt: new Date().toISOString()
+    };
+    reports.unshift(report);
+    return send(response, 200, report);
+  }
+
+  if (request.method === "GET" && path === "/api/n3/reports") {
+    if (!currentUser) return send(response, 401, { code: "AUTH_REQUIRED", message: "请先登录" });
+    return send(response, 200, reports.filter((item) => item.reporter.id === currentUser.id));
+  }
+
+  if (request.method === "POST" && path === "/api/n3/appeals") {
+    if (!currentUser) return send(response, 401, { code: "AUTH_REQUIRED", message: "请先登录" });
+    const body = await readJson(request);
+    const appeal = {
+      id: nextAppealId++,
+      reportId: Number(body.reportId) || reports[0]?.id || 1,
+      appellant: { id: currentUser.id, nickname: currentUser.nickname },
+      description: body.description || "申请复核处理结果。",
+      status: "PENDING_REVIEW",
+      reviewedByAdminId: null,
+      reviewedAt: null,
+      reviewNote: null,
+      evidenceFileIds: body.evidenceFileIds || [],
+      createdAt: new Date().toISOString()
+    };
+    appeals.unshift(appeal);
+    return send(response, 200, appeal);
+  }
+
+  if (request.method === "GET" && path === "/api/n3/appeals") {
+    if (!currentUser) return send(response, 401, { code: "AUTH_REQUIRED", message: "请先登录" });
+    return send(response, 200, appeals.filter((item) => item.appellant.id === currentUser.id));
+  }
+
+  if (request.method === "POST" && path === "/api/n3/refunds") {
+    if (!currentUser?.canTrade) return send(response, 403, { code: "TRADE_ELIGIBILITY_REQUIRED", message: "完成校园认证后才能交易" });
+    const body = await readJson(request);
+    const refund = {
+      id: nextRefundId++,
+      refundNo: `R${Date.now()}`,
+      orderId: Number(body.orderId) || orders[0].id,
+      paymentOrderId: null,
+      requester: { id: currentUser.id, nickname: currentUser.nickname },
+      amount: body.amount || "10.00",
+      refundType: body.refundType || "FULL",
+      reason: body.reason || "申请平台协助退款。",
+      status: "PENDING",
+      decisionByAdminId: null,
+      decisionNote: null,
+      processedAt: null,
+      createdAt: new Date().toISOString()
+    };
+    refunds.unshift(refund);
+    return send(response, 200, refund);
+  }
+
+  if (request.method === "GET" && path === "/api/n3/refunds") {
+    if (!currentUser) return send(response, 401, { code: "AUTH_REQUIRED", message: "请先登录" });
+    return send(response, 200, refunds.filter((item) => item.requester.id === currentUser.id));
+  }
+
+  if (request.method === "GET" && path === "/api/n3/credit/me") {
+    if (!currentUser) return send(response, 401, { code: "AUTH_REQUIRED", message: "请先登录" });
+    return send(response, 200, creditSummary());
+  }
+
+  if (request.method === "POST" && /^\/api\/n3\/favorites\/\d+$/.test(path)) {
+    const id = Number(path.split("/").at(-1));
+    const item = goods.find((entry) => entry.id === id) ?? goods[0];
+    if (!favorites.some((entry) => entry.goodsId === id)) {
+      favorites.unshift({ id: favorites.length + 1, goodsId: id, goodsTitle: item.title, goodsPrice: item.listPrice, seller: item.seller, createdAt: new Date().toISOString() });
+    }
+    return send(response, 200, { active: true });
+  }
+
+  if (request.method === "DELETE" && /^\/api\/n3\/favorites\/\d+$/.test(path)) {
+    const id = Number(path.split("/").at(-1));
+    const index = favorites.findIndex((entry) => entry.goodsId === id);
+    if (index >= 0) favorites.splice(index, 1);
+    return send(response, 200, { active: false });
+  }
+
+  if (request.method === "POST" && /^\/api\/n3\/follows\/\d+$/.test(path)) {
+    const id = Number(path.split("/").at(-1));
+    const user = Object.values(users).find((entry) => entry.id === id) ?? goods[0].seller;
+    if (!follows.some((entry) => entry.followedUser.id === user.id)) {
+      follows.unshift({ id: follows.length + 1, followedUser: { id: user.id, nickname: user.nickname }, createdAt: new Date().toISOString() });
+    }
+    return send(response, 200, { active: true });
+  }
+
+  if (request.method === "DELETE" && /^\/api\/n3\/follows\/\d+$/.test(path)) {
+    const id = Number(path.split("/").at(-1));
+    const index = follows.findIndex((entry) => entry.followedUser.id === id);
+    if (index >= 0) follows.splice(index, 1);
+    return send(response, 200, { active: false });
+  }
+
+  if (request.method === "POST" && /^\/api\/admin\/n3\/reports\/\d+\/handle$/.test(path)) {
+    const body = await readJson(request);
+    const report = reports.find((item) => item.id === Number(path.split("/")[5]));
+    if (!report) return send(response, 404, { code: "NOT_FOUND", message: "举报不存在" });
+    report.status = body.status || "UPHELD";
+    report.handlingNote = body.handlingNote || "管理员已处理";
+    report.handledAt = new Date().toISOString();
+    report.handledByAdminId = currentUser?.id ?? 1;
+    return send(response, 200, report);
+  }
+
+  if (request.method === "POST" && /^\/api\/admin\/n3\/appeals\/\d+\/review$/.test(path)) {
+    const body = await readJson(request);
+    const appeal = appeals.find((item) => item.id === Number(path.split("/")[5]));
+    if (!appeal) return send(response, 404, { code: "NOT_FOUND", message: "申诉不存在" });
+    appeal.status = body.status || "APPROVED";
+    appeal.reviewNote = body.reviewNote || "管理员已复核";
+    appeal.reviewedAt = new Date().toISOString();
+    appeal.reviewedByAdminId = currentUser?.id ?? 1;
+    return send(response, 200, appeal);
+  }
+
+  if (request.method === "POST" && /^\/api\/admin\/n3\/refunds\/\d+\/decide$/.test(path)) {
+    const body = await readJson(request);
+    const refund = refunds.find((item) => item.id === Number(path.split("/")[5]));
+    if (!refund) return send(response, 404, { code: "NOT_FOUND", message: "退款不存在" });
+    refund.status = body.status || "REFUNDED";
+    refund.decisionNote = body.decisionNote || "已处理";
+    refund.processedAt = new Date().toISOString();
+    refund.decisionByAdminId = currentUser?.id ?? 1;
+    return send(response, 200, refund);
+  }
+
+  if (request.method === "POST" && /^\/api\/admin\/n3\/penalties\/\d+\/lift$/.test(path)) {
+    const penalty = penalties.find((item) => item.id === Number(path.split("/")[5]));
+    if (!penalty) return send(response, 404, { code: "NOT_FOUND", message: "处罚不存在" });
+    penalty.status = "LIFTED";
+    penalty.liftedAt = new Date().toISOString();
+    penalty.liftedByAdminId = currentUser?.id ?? 1;
+    return send(response, 200, penalty);
+  }
+
   return send(response, 404, { message: `Mock API 未覆盖 ${request.method} ${path}` });
 });
 
 function findOrder(path) {
   const id = Number(path.split("/")[3]);
   return orders.find((order) => order.id === id);
+}
+
+function governanceOverview() {
+  return {
+    reports: reports.filter((item) => item.reporter.id === currentUser.id),
+    appeals: appeals.filter((item) => item.appellant.id === currentUser.id),
+    refunds: refunds.filter((item) => item.requester.id === currentUser.id),
+    favorites,
+    follows,
+    credit: creditSummary(),
+    adminQueue: currentUser.roles.some((role) => ["CONTENT_ADMIN", "SUPER_ADMIN"].includes(role)) ? {
+      pendingReports: reports.filter((item) => ["PENDING", "PROCESSING"].includes(item.status)),
+      pendingAppeals: appeals.filter((item) => item.status === "PENDING_REVIEW"),
+      pendingRefunds: refunds.filter((item) => ["PENDING", "PROCESSING"].includes(item.status)),
+      activePenalties: penalties.filter((item) => item.status === "ACTIVE")
+    } : null
+  };
+}
+
+function creditSummary() {
+  return {
+    userId: currentUser.id,
+    fulfillmentCount: 1,
+    onTimeMeetupCount: 1,
+    positiveReviewCount: 0,
+    negativeEventCount: penalties.filter((item) => item.user.id === currentUser.id && item.status === "ACTIVE").length,
+    publicTags: ["有完成交易记录", "暂无有效处罚"],
+    internalScore: 82,
+    internalLevel: "B",
+    recentRecords: [],
+    updatedAt: new Date().toISOString()
+  };
 }
 
 server.listen(port, "127.0.0.1", () => {
