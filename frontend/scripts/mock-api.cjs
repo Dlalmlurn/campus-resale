@@ -149,6 +149,67 @@ const orders = [{
   closedAt: null
 }];
 
+let notifications = [{
+  id: 1,
+  type: "PAYMENT_ESCROWED",
+  title: "订单已进入托管",
+  content: "订单 O202606050000 已支付成功，等待线下面交。",
+  relatedType: "ORDER",
+  relatedId: 76,
+  read: false,
+  readAt: null,
+  createdAt: "2026-06-05T10:05:00"
+}, {
+  id: 2,
+  type: "ORDER_CREATED",
+  title: "你有新的订单",
+  content: "买家已提交订单，请在后台演示前确认订单流转状态。",
+  relatedType: "ORDER",
+  relatedId: 76,
+  read: true,
+  readAt: "2026-06-05T10:10:00",
+  createdAt: "2026-06-05T10:00:00"
+}];
+
+const operationLogs = [{
+  id: 1,
+  adminId: 1,
+  action: "VERIFY_APPROVE",
+  targetType: "CAMPUS_VERIFICATION",
+  targetId: 18,
+  ipAddress: "127.0.0.1",
+  userAgent: "mock-api",
+  requestPath: "/api/admin/verifications/18/approve",
+  httpMethod: "POST",
+  result: "SUCCESS",
+  operatorType: "ADMIN",
+  createdAt: "2026-06-05T10:20:00"
+}, {
+  id: 2,
+  adminId: 1,
+  action: "GOODS_APPROVE",
+  targetType: "GOODS",
+  targetId: 4,
+  ipAddress: "127.0.0.1",
+  userAgent: "mock-api",
+  requestPath: "/api/admin/goods/4/approve",
+  httpMethod: "POST",
+  result: "SUCCESS",
+  operatorType: "ADMIN",
+  createdAt: "2026-06-05T10:18:00"
+}];
+
+const sensitiveAccessLogs = [{
+  id: 1,
+  adminId: 1,
+  targetType: "CAMPUS_AUTH_MATERIAL",
+  targetId: 800,
+  reason: "审核校园认证材料",
+  result: "ALLOWED",
+  ipAddress: "127.0.0.1",
+  createdAt: "2026-06-05T10:16:00"
+}];
+
 function send(response, status, payload) {
   response.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
   response.end(JSON.stringify(payload));
@@ -170,6 +231,97 @@ function readJson(request) {
 
 function page(items) {
   return { items, page: 0, pageSize: 20, total: items.length };
+}
+
+function dashboardStats() {
+  const completed = orders.filter((order) => order.status.startsWith("COMPLETED")).length;
+  const pendingSellerConfirm = orders.filter((order) => order.status === "PENDING_SELLER_CONFIRM").length;
+  const pendingPayment = orders.filter((order) => order.status === "PENDING_PAYMENT").length;
+  const paidPendingMeetup = orders.filter((order) => order.status === "PAID_PENDING_MEETUP").length;
+  return {
+    orders: {
+      totalOrders: orders.length,
+      pendingSellerConfirm,
+      pendingPayment,
+      paidPendingMeetup,
+      completedPendingSettlement: orders.filter((order) => order.status === "COMPLETED_PENDING_SETTLEMENT").length,
+      completed,
+      cancelled: orders.filter((order) => order.status === "CANCELLED").length,
+      closed: orders.filter((order) => order.closedAt).length,
+      disputeProcessing: 0,
+      refundProcessing: 0,
+      activeFrozenAmount: "258.00",
+      completedAmount: "129.00"
+    },
+    payments: {
+      totalPayments: payments.size,
+      pending: 0,
+      processing: 0,
+      escrowed: [...payments.values()].filter((payment) => payment.status === "ESCROWED").length,
+      failed: 0,
+      closed: 0,
+      escrowedAmount: "129.00",
+      totalProcessedAmount: "129.00"
+    },
+    settlements: {
+      totalSettlements: 1,
+      pending: 1,
+      processing: 0,
+      settled: 0,
+      failed: 0,
+      closed: 0,
+      totalSettledAmount: "0.00",
+      pendingSettlementAmount: "129.00"
+    },
+    goods: {
+      totalGoods: goods.length,
+      draft: goods.filter((item) => item.status === "DRAFT").length,
+      pendingReview: goods.filter((item) => item.status === "PENDING_REVIEW").length,
+      onSale: goods.filter((item) => item.status === "ON_SALE").length,
+      reserved: goods.filter((item) => item.status === "RESERVED").length,
+      sold: goods.filter((item) => item.status === "SOLD").length,
+      offShelf: goods.filter((item) => item.status === "OFF_SHELF").length,
+      deleted: 0,
+      auditPending: goods.filter((item) => item.auditStatus === "PENDING").length
+    },
+    reviews: {
+      totalReviews: [...reviews.values()].flat().length,
+      submitted: [...reviews.values()].flat().length,
+      visible: [...reviews.values()].flat().length,
+      hidden: 0,
+      excluded: 0,
+      avgRating: 5,
+      fiveStar: [...reviews.values()].flat().length,
+      fourStar: 0,
+      threeStar: 0,
+      lowRating: 0
+    },
+    users: {
+      totalUsers: Object.keys(users).length,
+      activeUsers: Object.keys(users).length,
+      lockedUsers: 0,
+      disabledUsers: 0,
+      newThisMonth: 4,
+      newToday: 1
+    },
+    campusAuths: {
+      totalVerifications: 1,
+      draft: 0,
+      accumulating: 0,
+      pendingReview: verification.status === "PENDING_REVIEW" ? 1 : 0,
+      approved: verification.status === "APPROVED" ? 1 : 0,
+      rejected: verification.status === "REJECTED" ? 1 : 0,
+      invalid: 0
+    },
+    operationLogs: {
+      totalLogs: operationLogs.length,
+      successCount: operationLogs.filter((log) => log.result === "SUCCESS").length,
+      failureCount: 0,
+      partialCount: 0,
+      todayCount: operationLogs.length,
+      thisMonthCount: operationLogs.length
+    }
+  };
 }
 
 function userFor(username) {
@@ -411,6 +563,44 @@ const server = http.createServer(async (request, response) => {
   if (request.method === "POST" && path === "/api/verifications/me/submit") {
     verification.status = "PENDING_REVIEW";
     return send(response, 200, verification);
+  }
+
+  if (request.method === "GET" && path === "/api/notifications") {
+    const unreadOnly = url.searchParams.get("unreadOnly") === "true";
+    const visible = unreadOnly ? notifications.filter((item) => !item.read) : notifications;
+    return send(response, 200, page(visible));
+  }
+  if (request.method === "GET" && path === "/api/notifications/unread-count") {
+    return send(response, 200, { unreadCount: notifications.filter((item) => !item.read).length });
+  }
+  if (request.method === "POST" && path === "/api/notifications/read-all") {
+    let updatedCount = 0;
+    notifications = notifications.map((item) => {
+      if (item.read) return item;
+      updatedCount += 1;
+      return { ...item, read: true, readAt: new Date().toISOString() };
+    });
+    return send(response, 200, { updatedCount });
+  }
+
+  if (request.method === "GET" && path === "/api/admin/stats/dashboard") {
+    return send(response, 200, dashboardStats());
+  }
+  if (request.method === "GET" && path === "/api/admin/stats/order-trend") {
+    return send(response, 200, [
+      { statDate: "2026-06-03", totalCreated: 1, completedCount: 0, cancelledCount: 0 },
+      { statDate: "2026-06-04", totalCreated: 2, completedCount: 1, cancelledCount: 0 },
+      { statDate: "2026-06-05", totalCreated: 3, completedCount: 1, cancelledCount: 0 }
+    ]);
+  }
+  if (request.method === "GET" && path === "/api/admin/operation-logs") {
+    const action = url.searchParams.get("action");
+    const result = url.searchParams.get("result");
+    return send(response, 200, page(operationLogs.filter((item) => (!action || item.action === action) && (!result || item.result === result))));
+  }
+  if (request.method === "GET" && path === "/api/admin/sensitive-access-logs") {
+    const targetType = url.searchParams.get("targetType");
+    return send(response, 200, page(sensitiveAccessLogs.filter((item) => !targetType || item.targetType === targetType)));
   }
 
   if (request.method === "GET" && path === "/api/admin/verifications") {

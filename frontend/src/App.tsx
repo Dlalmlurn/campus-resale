@@ -1,6 +1,7 @@
 import {
   ArrowLeft,
   BadgeCheck,
+  Bell,
   BookOpen,
   BarChart3,
   Check,
@@ -45,6 +46,12 @@ import {
   uploadFile
 } from "./api/m1";
 import { createOrder } from "./api/orders";
+import {
+  getNotifications,
+  getUnreadNotificationCount,
+  markAllNotificationsRead,
+  type NotificationItem
+} from "./api/notifications";
 import type {
   CampusPlaceSummary,
   CampusVerification,
@@ -64,6 +71,7 @@ type Route =
   | { name: "goods"; id: number }
   | { name: "orders" }
   | { name: "order"; id: number }
+  | { name: "notifications" }
   | { name: "auth" }
   | { name: "verification" }
   | { name: "seller" }
@@ -172,7 +180,7 @@ export function App() {
   }, [refreshGoods]);
 
   useEffect(() => {
-    if ((route.name === "orders" || route.name === "order") && authChecked && currentUser === null) {
+    if ((route.name === "orders" || route.name === "order" || route.name === "notifications") && authChecked && currentUser === null) {
       notify("error", "请先登录后继续");
       navigate({ name: "auth" });
       return;
@@ -184,7 +192,7 @@ export function App() {
   }, [authChecked, currentUser, navigate, notify, route.name]);
 
   const guardedNavigate = (next: Route) => {
-    if (!currentUser && (next.name === "verification" || next.name === "seller" || next.name === "admin" || next.name === "orders" || next.name === "order")) {
+    if (!currentUser && (next.name === "verification" || next.name === "seller" || next.name === "admin" || next.name === "orders" || next.name === "order" || next.name === "notifications")) {
       notify("error", "请先登录后继续");
       navigate({ name: "auth" });
       return;
@@ -235,10 +243,13 @@ export function App() {
         <nav className="main-nav" aria-label="主要导航">
           <NavButton active={route.name === "market"} icon={<Home size={17} />} label="商品" onClick={() => navigate({ name: "market" })} />
           <NavButton active={route.name === "orders" || route.name === "order"} icon={<ClipboardList size={17} />} label="订单" onClick={() => guardedNavigate({ name: "orders" })} />
+          {currentUser && (
+            <NavButton active={route.name === "notifications"} icon={<Bell size={17} />} label="通知" onClick={() => guardedNavigate({ name: "notifications" })} />
+          )}
           <NavButton active={route.name === "seller"} icon={<PackagePlus size={17} />} label="发布" onClick={() => guardedNavigate({ name: "seller" })} />
           <NavButton active={route.name === "verification"} icon={<BadgeCheck size={17} />} label="认证" onClick={() => guardedNavigate({ name: "verification" })} />
           {isAdmin(currentUser) && (
-            <NavButton active={route.name === "admin"} icon={<ShieldCheck size={17} />} label="审核" onClick={() => guardedNavigate({ name: "admin" })} />
+            <NavButton active={route.name === "admin"} icon={<ShieldCheck size={17} />} label="后台" onClick={() => guardedNavigate({ name: "admin" })} />
           )}
         </nav>
         <div className="account-area">
@@ -287,10 +298,11 @@ export function App() {
         {route.name === "goods" && <GoodsDetailPage id={route.id} catalog={catalog} currentUser={currentUser} navigate={navigate} onBack={() => navigate({ name: "market" })} notify={notify} />}
         {route.name === "orders" && currentUser && <OrdersPage currentUser={currentUser} notify={notify} onOpenOrder={(id) => navigate({ name: "order", id })} />}
         {route.name === "order" && currentUser && <OrderDetailPage id={route.id} currentUser={currentUser} notify={notify} onBack={() => navigate({ name: "orders" })} />}
+        {route.name === "notifications" && currentUser && <NotificationsPage notify={notify} onOpenOrder={(id) => navigate({ name: "order", id })} />}
         {route.name === "auth" && <AuthPage currentUser={currentUser} onAuthenticated={setCurrentUser} navigate={navigate} notify={notify} />}
         {route.name === "verification" && currentUser && <VerificationPage currentUser={currentUser} onUserChange={setCurrentUser} notify={notify} />}
         {route.name === "seller" && currentUser?.canTrade && <SellerPage catalog={catalog} notify={notify} />}
-        {route.name === "admin" && isAdmin(currentUser) && <AdminPage notify={notify} />}
+        {route.name === "admin" && isAdmin(currentUser) && <AdminPage notify={notify} navigate={navigate} />}
       </main>
     </div>
   );
@@ -750,7 +762,82 @@ function SellerPage(props: { catalog: Catalog; notify: Notify }) {
   );
 }
 
-function AdminPage(props: { notify: Notify }) {
+function NotificationsPage(props: { notify: Notify; onOpenOrder: (id: number) => void }) {
+  const [items, setItems] = useState<NotificationItem[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadOnly, setUnreadOnly] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [page, count] = await Promise.all([
+        getNotifications({ unreadOnly, page: 1, pageSize: 20 }),
+        getUnreadNotificationCount()
+      ]);
+      setItems(page.items);
+      setUnreadCount(count.unreadCount);
+    } catch (error) {
+      props.notify("error", messageOf(error));
+    } finally {
+      setLoading(false);
+    }
+  }, [props.notify, unreadOnly]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const markAllRead = async () => {
+    try {
+      await markAllNotificationsRead();
+      setUnreadCount(0);
+      setItems((current) => current.map((item) => ({ ...item, read: true, readAt: item.readAt ?? new Date().toISOString() })));
+      props.notify("success", "通知已全部标为已读");
+    } catch (error) {
+      props.notify("error", messageOf(error));
+    }
+  };
+
+  return (
+    <section>
+      <div className="order-toolbar">
+        <PageHeading eyebrow="消息中心" title="站内通知" text="集中查看订单、支付、审核和结算状态变化。" />
+        <div className="notification-actions">
+          <span className="badge neutral">{unreadCount} 条未读</span>
+          <button className={`secondary-button compact ${unreadOnly ? "active" : ""}`} type="button" onClick={() => setUnreadOnly((value) => !value)}>
+            只看未读
+          </button>
+          <button className="primary-button compact" type="button" onClick={() => void markAllRead()} disabled={unreadCount === 0}>
+            全部标为已读
+          </button>
+        </div>
+      </div>
+
+      {loading ? <LoadingBlock /> : items.length === 0 ? <EmptyBlock title="当前没有通知" /> : (
+        <div className="notification-list">
+          {items.map((item) => (
+            <article className={`notification-row ${item.read ? "" : "unread"}`} key={item.id}>
+              <div className="notification-main">
+                <div className="notification-title-line">
+                  <strong>{item.title}</strong>
+                  {!item.read && <span className="badge warning">未读</span>}
+                </div>
+                <p>{item.content}</p>
+                <small>{formatDate(item.createdAt)} · {notificationTypeLabel(item.type)}</small>
+              </div>
+              {item.relatedType === "ORDER" && item.relatedId !== null && (
+                <button className="secondary-button compact" type="button" onClick={() => props.onOpenOrder(item.relatedId!)}>
+                  查看订单
+                </button>
+              )}
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function AdminPage(props: { notify: Notify; navigate: (route: Route) => void }) {
   const [tab, setTab] = useState<"verification" | "goods" | "dashboard" | "audit">("dashboard");
   const [verifications, setVerifications] = useState<CampusVerification[]>([]);
   const [goods, setGoods] = useState<GoodsSummary[]>([]);
@@ -793,6 +880,18 @@ function AdminPage(props: { notify: Notify }) {
 
   return (
     <section>
+      <PageHeading eyebrow="N2 后台验收" title="后台验收闭环" text="汇总统计看板、审核队列、审计日志和通知入口，演示关键状态变化可追溯。" />
+      <div className="admin-demo-guide">
+        <div>
+          <p className="eyebrow">Demo flow</p>
+          <h2>演示导航</h2>
+        </div>
+        <button className="secondary-button compact" type="button" onClick={() => setTab("dashboard")}>查看统计看板</button>
+        <button className="secondary-button compact" type="button" onClick={() => setTab("verification")}>认证审核</button>
+        <button className="secondary-button compact" type="button" onClick={() => setTab("goods")}>商品审核</button>
+        <button className="secondary-button compact" type="button" onClick={() => setTab("audit")}>查看审计日志</button>
+        <button className="primary-button compact" type="button" onClick={() => props.navigate({ name: "notifications" })}>通知列表</button>
+      </div>
       {/* 顶部 Tab 导航 —— 4 个功能区 */}
       <div className="segmented-control admin-tabs admin-tabs--wide">
         <button
@@ -901,7 +1000,7 @@ function parseRoute(): Route {
   const value = window.location.hash.replace(/^#\/?/, "") || "market";
   if (value.startsWith("goods/")) return { name: "goods", id: Number(value.split("/")[1]) };
   if (value.startsWith("orders/")) return { name: "order", id: Number(value.split("/")[1]) };
-  if (["market", "orders", "auth", "verification", "seller", "admin"].includes(value)) return { name: value as Route["name"] } as Route;
+  if (["market", "orders", "notifications", "auth", "verification", "seller", "admin"].includes(value)) return { name: value as Route["name"] } as Route;
   return { name: "market" };
 }
 
@@ -921,6 +1020,17 @@ function messageOf(error: unknown) {
 
 function factorLabel(value: string) {
   return ({ NAME_STUDENT_NO: "姓名与学号", DEPARTMENT: "院系信息", CAMPUS_EMAIL: "校园邮箱", STUDENT_CARD: "学生证", CAMPUS_CARD: "校园卡" } as Record<string, string>)[value] ?? value;
+}
+
+function notificationTypeLabel(value: string) {
+  return ({
+    ORDER_CREATED: "订单创建",
+    ORDER_SELLER_CONFIRMED: "卖家确认",
+    PAYMENT_ESCROWED: "支付托管",
+    COMPLETION_REQUESTED: "完成确认",
+    ORDER_COMPLETED: "订单完成",
+    SETTLEMENT_STATUS_CHANGED: "结算状态"
+  } as Record<string, string>)[value] ?? value;
 }
 
 function formatDate(value?: string | null) {
