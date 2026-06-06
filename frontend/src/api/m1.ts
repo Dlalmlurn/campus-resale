@@ -87,7 +87,7 @@ export function submitVerification() {
   return apiRequest<CampusVerification>("/api/verifications/me/submit", { method: "POST" });
 }
 
-export function uploadFile(file: File, fileKind: "GOODS_IMAGE" | "CAMPUS_AUTH_MATERIAL") {
+export function uploadFile(file: File, fileKind: "GOODS_IMAGE" | "CAMPUS_AUTH_MATERIAL" | "ORDER_EVIDENCE" | "REPORT_EVIDENCE" | "APPEAL_EVIDENCE") {
   const body = new FormData();
   body.set("file", file);
   body.set("fileKind", fileKind);

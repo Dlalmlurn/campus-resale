@@ -30,6 +30,15 @@ const verifiedSeller: CurrentUser = {
   canTrade: true
 };
 
+const contentAdmin: CurrentUser = {
+  id: 1,
+  username: "content_admin",
+  nickname: "内容管理员",
+  roles: ["CONTENT_ADMIN"],
+  verificationStatus: "NONE",
+  canTrade: false
+};
+
 describe("App", () => {
   beforeEach(() => {
     window.location.hash = "#/market";
@@ -117,6 +126,20 @@ describe("App", () => {
     await waitFor(() => expect(screen.getByText("等待买家支付")).toBeInTheDocument());
     expect(screen.queryByRole("button", { name: "确认接单" })).not.toBeInTheDocument();
   });
+
+  it("opens the N3 governance center with credit and admin queues", async () => {
+    stubBackend(contentAdmin);
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByText("内容管理员")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "治理" }));
+
+    await waitFor(() => expect(screen.getByText("治理与信用中心")).toBeInTheDocument());
+    expect(screen.getByText("信用等级")).toBeInTheDocument();
+    expect(screen.getByText("我的举报")).toBeInTheDocument();
+    expect(screen.getByText("管理员待办")).toBeInTheDocument();
+    expect(screen.getAllByText("商品描述与实际成色不一致，需要管理员核实。").length).toBeGreaterThan(0);
+  });
 });
 
 function stubBackend(currentUser?: CurrentUser) {
@@ -164,6 +187,61 @@ function stubBackend(currentUser?: CurrentUser) {
       closedAt: null
     });
     if (url === "/api/orders/77/seller-confirm") return response({ ...pendingOrder(), status: "PENDING_PAYMENT" });
+    if (url === "/api/n3/governance-overview") {
+      return response({
+        reports: [{
+          id: 39,
+          reporter: { id: 31, nickname: "买家同学" },
+          targetType: "GOODS",
+          targetId: 10,
+          reasonType: "FAKE_GOODS",
+          description: "商品描述与实际成色不一致，需要管理员核实。",
+          status: "PENDING",
+          priority: "NORMAL",
+          handledByAdminId: null,
+          handledAt: null,
+          handlingNote: null,
+          evidenceFileIds: [],
+          createdAt: "2026-06-05T11:20:00Z"
+        }],
+        appeals: [],
+        refunds: [],
+        favorites: [],
+        follows: [],
+        credit: {
+          userId: currentUser?.id ?? 1,
+          fulfillmentCount: 1,
+          onTimeMeetupCount: 1,
+          positiveReviewCount: 0,
+          negativeEventCount: 0,
+          publicTags: ["有完成交易记录", "暂无有效处罚"],
+          internalScore: 82,
+          internalLevel: "B",
+          recentRecords: [],
+          updatedAt: "2026-06-05T12:00:00Z"
+        },
+        adminQueue: currentUser?.roles.includes("CONTENT_ADMIN") ? {
+          pendingReports: [{
+            id: 39,
+            reporter: { id: 31, nickname: "买家同学" },
+            targetType: "GOODS",
+            targetId: 10,
+            reasonType: "FAKE_GOODS",
+            description: "商品描述与实际成色不一致，需要管理员核实。",
+            status: "PENDING",
+            priority: "NORMAL",
+            handledByAdminId: null,
+            handledAt: null,
+            handlingNote: null,
+            evidenceFileIds: [],
+            createdAt: "2026-06-05T11:20:00Z"
+          }],
+          pendingAppeals: [],
+          pendingRefunds: [],
+          activePenalties: []
+        } : null
+      });
+    }
     if (url === "/api/orders" || path === "/api/orders") return response(pendingOrder());
     if (url.startsWith("/api/goods?")) {
       return response({

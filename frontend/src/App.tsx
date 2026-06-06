@@ -58,6 +58,7 @@ import type {
 import { OrderDetailPage, OrdersPage } from "./pages/orders";
 import { AdminDashboardPage } from "./pages/admin-dashboard";
 import { AdminAuditLogsPage } from "./pages/admin-audit-logs";
+import { GovernancePage } from "./pages/governance";
 
 type Route =
   | { name: "market" }
@@ -67,6 +68,7 @@ type Route =
   | { name: "auth" }
   | { name: "verification" }
   | { name: "seller" }
+  | { name: "governance" }
   | { name: "admin" };
 
 type Catalog = {
@@ -172,7 +174,7 @@ export function App() {
   }, [refreshGoods]);
 
   useEffect(() => {
-    if ((route.name === "orders" || route.name === "order") && authChecked && currentUser === null) {
+    if ((route.name === "orders" || route.name === "order" || route.name === "governance") && authChecked && currentUser === null) {
       notify("error", "请先登录后继续");
       navigate({ name: "auth" });
       return;
@@ -184,7 +186,7 @@ export function App() {
   }, [authChecked, currentUser, navigate, notify, route.name]);
 
   const guardedNavigate = (next: Route) => {
-    if (!currentUser && (next.name === "verification" || next.name === "seller" || next.name === "admin" || next.name === "orders" || next.name === "order")) {
+    if (!currentUser && (next.name === "verification" || next.name === "seller" || next.name === "governance" || next.name === "admin" || next.name === "orders" || next.name === "order")) {
       notify("error", "请先登录后继续");
       navigate({ name: "auth" });
       return;
@@ -237,6 +239,7 @@ export function App() {
           <NavButton active={route.name === "orders" || route.name === "order"} icon={<ClipboardList size={17} />} label="订单" onClick={() => guardedNavigate({ name: "orders" })} />
           <NavButton active={route.name === "seller"} icon={<PackagePlus size={17} />} label="发布" onClick={() => guardedNavigate({ name: "seller" })} />
           <NavButton active={route.name === "verification"} icon={<BadgeCheck size={17} />} label="认证" onClick={() => guardedNavigate({ name: "verification" })} />
+          <NavButton active={route.name === "governance"} icon={<ShieldAlert size={17} />} label="治理" onClick={() => guardedNavigate({ name: "governance" })} />
           {isAdmin(currentUser) && (
             <NavButton active={route.name === "admin"} icon={<ShieldCheck size={17} />} label="审核" onClick={() => guardedNavigate({ name: "admin" })} />
           )}
@@ -290,6 +293,7 @@ export function App() {
         {route.name === "auth" && <AuthPage currentUser={currentUser} onAuthenticated={setCurrentUser} navigate={navigate} notify={notify} />}
         {route.name === "verification" && currentUser && <VerificationPage currentUser={currentUser} onUserChange={setCurrentUser} notify={notify} />}
         {route.name === "seller" && currentUser?.canTrade && <SellerPage catalog={catalog} notify={notify} />}
+        {route.name === "governance" && currentUser && <GovernancePage currentUser={currentUser} notify={notify} />}
         {route.name === "admin" && isAdmin(currentUser) && <AdminPage notify={notify} />}
       </main>
     </div>
@@ -901,7 +905,7 @@ function parseRoute(): Route {
   const value = window.location.hash.replace(/^#\/?/, "") || "market";
   if (value.startsWith("goods/")) return { name: "goods", id: Number(value.split("/")[1]) };
   if (value.startsWith("orders/")) return { name: "order", id: Number(value.split("/")[1]) };
-  if (["market", "orders", "auth", "verification", "seller", "admin"].includes(value)) return { name: value as Route["name"] } as Route;
+  if (["market", "orders", "auth", "verification", "seller", "governance", "admin"].includes(value)) return { name: value as Route["name"] } as Route;
   return { name: "market" };
 }
 
