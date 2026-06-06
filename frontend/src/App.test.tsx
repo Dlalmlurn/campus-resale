@@ -34,9 +34,9 @@ const contentAdmin: CurrentUser = {
   id: 1,
   username: "content_admin",
   nickname: "内容管理员",
-  roles: ["CONTENT_ADMIN"],
-  verificationStatus: "NONE",
-  canTrade: false
+  roles: ["REGISTERED_USER", "VERIFIED_STUDENT", "CONTENT_ADMIN"],
+  verificationStatus: "APPROVED",
+  canTrade: true
 };
 
 describe("App", () => {
@@ -127,18 +127,33 @@ describe("App", () => {
     expect(screen.queryByRole("button", { name: "确认接单" })).not.toBeInTheDocument();
   });
 
-  it("opens the N3 governance center with credit and admin queues", async () => {
+  it("shows the N2 admin acceptance workspace with demo navigation", async () => {
+    window.location.hash = "#/admin";
     stubBackend(contentAdmin);
     render(<App />);
 
-    await waitFor(() => expect(screen.getByText("内容管理员")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "治理" }));
+    await waitFor(() => expect(screen.getByText("后台验收闭环")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "后台" })).toBeInTheDocument();
+    expect(screen.getByText("演示导航")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看审计日志" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "通知列表" })).toBeInTheDocument();
 
-    await waitFor(() => expect(screen.getByText("治理与信用中心")).toBeInTheDocument());
-    expect(screen.getByText("信用等级")).toBeInTheDocument();
-    expect(screen.getByText("我的举报")).toBeInTheDocument();
-    expect(screen.getByText("管理员待办")).toBeInTheDocument();
-    expect(screen.getAllByText("商品描述与实际成色不一致，需要管理员核实。").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "查看审计日志" }));
+    await waitFor(() => expect(screen.getByText("操作日志")).toBeInTheDocument());
+  });
+
+  it("loads notifications and can mark all as read", async () => {
+    window.location.hash = "#/notifications";
+    stubBackend(verifiedBuyer);
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByText("站内通知")).toBeInTheDocument());
+    expect(screen.getByText("订单已进入托管")).toBeInTheDocument();
+    expect(screen.getByText("1 条未读")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "全部标为已读" }));
+
+    await waitFor(() => expect(screen.getByText("0 条未读")).toBeInTheDocument());
   });
 });
 
@@ -175,6 +190,50 @@ function stubBackend(currentUser?: CurrentUser) {
     if (url === "/api/orders?page=1&pageSize=20") return response({ items: [pendingOrder()], page: 1, pageSize: 20, total: 1 });
     if (url === "/api/orders/77") return response(pendingOrder());
     if (url === "/api/orders/77/reviews") return response([]);
+    if (url === "/api/admin/stats/dashboard") return response(adminDashboard());
+    if (url === "/api/admin/stats/order-trend") return response([
+      { statDate: "2026-06-05", totalCreated: 3, completedCount: 1, cancelledCount: 0 }
+    ]);
+    if (url.startsWith("/api/admin/operation-logs")) return response({
+      items: [{
+        id: 1,
+        adminId: 1,
+        action: "GOODS_APPROVE",
+        targetType: "GOODS",
+        targetId: 10,
+        ipAddress: "127.0.0.1",
+        userAgent: "vitest",
+        requestPath: "/api/admin/goods/10/approve",
+        httpMethod: "POST",
+        result: "SUCCESS",
+        operatorType: "ADMIN",
+        createdAt: "2026-06-05T10:00:00Z"
+      }],
+      page: 1,
+      pageSize: 20,
+      total: 1
+    });
+    if (url.startsWith("/api/admin/sensitive-access-logs")) return response({ items: [], page: 1, pageSize: 20, total: 0 });
+    if (url.startsWith("/api/admin/verifications")) return response({ items: [], page: 1, pageSize: 20, total: 0 });
+    if (url.startsWith("/api/admin/goods")) return response({ items: [], page: 1, pageSize: 20, total: 0 });
+    if (url === "/api/notifications/unread-count") return response({ unreadCount: 1 });
+    if (url.startsWith("/api/notifications?")) return response({
+      items: [{
+        id: 9,
+        type: "PAYMENT_ESCROWED",
+        title: "订单已进入托管",
+        content: "订单 O202606050001 已支付成功，等待线下面交。",
+        relatedType: "ORDER",
+        relatedId: 77,
+        read: false,
+        readAt: null,
+        createdAt: "2026-06-05T10:05:00Z"
+      }],
+      page: 1,
+      pageSize: 20,
+      total: 1
+    });
+    if (url === "/api/notifications/read-all") return response({ updatedCount: 1 });
     if (url === "/api/orders/77/payment") return response({
       id: 501,
       paymentNo: "PAY202606050001",
@@ -295,4 +354,91 @@ function response(body: unknown, status = 200) {
     status,
     json: async () => body
   } as Response);
+}
+
+function adminDashboard() {
+  return {
+    orders: {
+      totalOrders: 8,
+      pendingSellerConfirm: 1,
+      pendingPayment: 1,
+      paidPendingMeetup: 2,
+      completedPendingSettlement: 1,
+      completed: 3,
+      cancelled: 0,
+      closed: 0,
+      disputeProcessing: 0,
+      refundProcessing: 0,
+      activeFrozenAmount: "258.00",
+      completedAmount: "386.00"
+    },
+    payments: {
+      totalPayments: 5,
+      pending: 0,
+      processing: 0,
+      escrowed: 2,
+      failed: 0,
+      closed: 0,
+      escrowedAmount: "258.00",
+      totalProcessedAmount: "644.00"
+    },
+    settlements: {
+      totalSettlements: 3,
+      pending: 1,
+      processing: 0,
+      settled: 2,
+      failed: 0,
+      closed: 0,
+      totalSettledAmount: "386.00",
+      pendingSettlementAmount: "129.00"
+    },
+    goods: {
+      totalGoods: 12,
+      draft: 1,
+      pendingReview: 2,
+      onSale: 8,
+      reserved: 1,
+      sold: 2,
+      offShelf: 0,
+      deleted: 0,
+      auditPending: 2
+    },
+    reviews: {
+      totalReviews: 4,
+      submitted: 4,
+      visible: 4,
+      hidden: 0,
+      excluded: 0,
+      avgRating: 4.8,
+      fiveStar: 3,
+      fourStar: 1,
+      threeStar: 0,
+      lowRating: 0
+    },
+    users: {
+      totalUsers: 24,
+      activeUsers: 21,
+      lockedUsers: 0,
+      disabledUsers: 0,
+      newThisMonth: 6,
+      newToday: 1
+    },
+    campusAuths: {
+      totalVerifications: 15,
+      draft: 1,
+      accumulating: 1,
+      pendingReview: 2,
+      approved: 10,
+      rejected: 1,
+      invalid: 0
+    },
+    operationLogs: {
+      totalLogs: 18,
+      successCount: 16,
+      failureCount: 1,
+      partialCount: 1,
+      todayCount: 3,
+      thisMonthCount: 18
+    }
+  };
 }

@@ -252,6 +252,7 @@ function TrendChart({ data }: { data: OrderDailyTrendItem[] }) {
     const pts = data.map((d, i) => `${toX(i)},${toY(getter(d))}`).join(" ");
     return <polyline key={color} points={pts} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />;
   };
+  const labelIndexes = [...new Set([0, Math.floor((data.length - 1) / 2), data.length - 1])];
 
   return (
     <div className="trend-chart-wrap">
@@ -270,7 +271,7 @@ function TrendChart({ data }: { data: OrderDailyTrendItem[] }) {
         {polyline((d) => d.completedCount, "#22c55e")}
         {polyline((d) => d.cancelledCount, "#f87171")}
         {/* X 轴标签：仅首、中、末 */}
-        {[0, Math.floor((data.length - 1) / 2), data.length - 1].map((i) => {
+        {labelIndexes.map((i) => {
           const d = data[i];
           if (!d) return null;
           return (
