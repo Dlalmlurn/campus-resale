@@ -1,4 +1,5 @@
 # Local source/reference materials
+docs/历史资料/source_materials/
 docs/source_materials/
 source_materials/
 
@@ -24,6 +25,7 @@ logs/
 .DS_Store
 Thumbs.db
 Desktop.ini
+*:Zone.Identifier
 *.swp
 *.swo
 *~

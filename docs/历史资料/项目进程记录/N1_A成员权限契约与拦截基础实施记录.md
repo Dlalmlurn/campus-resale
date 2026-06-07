@@ -17,7 +17,7 @@ M1 已完成身份、会话、校园认证、商品审核和前端闭环。进�
 
 本轮不实现完整会话、订单、支付、退款和结算业务，只完成以下内容：
 
-1. 新增 `docs/阶段契约/n1_access_control_contracts.md`。
+1. 新增 `../阶段契约/n1_access_control_contracts.md`。
 2. 新增 `@RequireTradeEligible` 注解。
 3. 新增 `TradeEligibilityChecker` 平台接口。
 4. 新增 `CampusTradeEligibilityChecker`，复用 B 成员 `CampusTradeEligibilityResolver` 的完整 `canTrade` 规则。
@@ -79,7 +79,7 @@ N1 降级会话：
 
 - N1 可以先不做 WebSocket 和议价卡片。
 - 订单备注随 `POST /api/orders` 提交时，复用订单创建权限。
-- 后续如果恢复会话模块，再按 `docs/05_database_design.md` 和 N3 计划补齐私信、系统卡片和敏感访问日志。
+- 后续如果恢复会话模块，再按 `../../正式文档/05_database_design.md` 和 N3 计划补齐私信、系统卡片和敏感访问日志。
 
 订单模块：
 
@@ -97,5 +97,5 @@ N1 降级会话：
 
 - 运行后端测试，确认 `AuthorizationInterceptorTest` 全部通过。
 - 验证商品发布接口在未登录时返回 `401 AUTH_REQUIRED`，在登录但 `canTrade=false` 时返回 `403 FORBIDDEN`。
-- 后续新增订单、模拟支付、结算或评价 Controller 时，先根据 `docs/阶段契约/n1_access_control_contracts.md` 选择注解，再补服务层资源级权限测试。
+- 后续新增订单、模拟支付、结算或评价 Controller 时，先根据 `../阶段契约/n1_access_control_contracts.md` 选择注解，再补服务层资源级权限测试。
 - 如果发现业务接口需要新的上下文权限，例如“必须是订单卖家”，优先在服务层实现，不急着新增注解。

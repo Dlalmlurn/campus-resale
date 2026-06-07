@@ -1,8 +1,8 @@
 # 数据库设计
 
-本文件定义校园二手交易系统的最新版数据库设计口径。它承接 `00_project_baseline.md`、`01_project_shape.md`、`02_domain_contracts.md` 和 `04_final_quality_criteria.md`，并参考 `source_materials/` 中早期实体清单与 SQL 草稿。
+本文件定义校园二手交易系统的最新版数据库设计口径。它承接 `00_project_baseline.md`、`01_project_shape.md`、`02_domain_contracts.md` 和 `04_final_quality_criteria.md`，并参考 `../历史资料/source_materials/` 中早期实体清单与 SQL 草稿。
 
-若本文件与 `source_materials/` 冲突，以本文件和编号正式文档为准。早期草稿中的单一信用分、旧订单状态、直接保存图片 URL、简单订单完成即结算等口径不再采用。
+若本文件与 `../历史资料/source_materials/` 冲突，以本文件和编号正式文档为准。早期草稿中的单一信用分、旧订单状态、直接保存图片 URL、简单订单完成即结算等口径不再采用。
 
 ## 设计原则
 

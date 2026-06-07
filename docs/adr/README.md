@@ -12,7 +12,7 @@ ADR 是 Architecture Decision Record，也就是架构决策记录。
 
 | 文件 | 作用 |
 | --- | --- |
-| `../00_project_baseline.md` | 项目宪章，承接项目使命、正式边界、架构选择和长期决策。 |
+| `../正式文档/00_project_baseline.md` | 项目宪章，承接项目使命、正式边界、架构选择和长期决策。 |
 | `ADR-001-record-decisions-with-adrs.md` | 说明项目使用 ADR 管理长期决策。 |
 | `archive/README.md` | 历史细粒度 ADR 摘要，仅作追溯材料。 |
 

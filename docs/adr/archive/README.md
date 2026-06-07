@@ -35,4 +35,4 @@
 
 ## 归档规则
 
-历史碎片 ADR 不再逐篇保留。若后续需要恢复某个细节，应先检查 `../../00_project_baseline.md`、`../../01_project_shape.md` 和 `../../02_domain_contracts.md` 是否已经承接该口径。
+历史碎片 ADR 不再逐篇保留。若后续需要恢复某个细节，应先检查 `../../正式文档/00_project_baseline.md`、`../../正式文档/01_project_shape.md` 和 `../../正式文档/02_domain_contracts.md` 是否已经承接该口径。

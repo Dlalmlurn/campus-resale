@@ -12,4 +12,4 @@
 扩展提示：
 
 - 新业务不要直接返回零散错误格式。
-- 需要新增错误码时，先对齐 `docs/阶段契约/m1_contracts.md`，再补 `ApiExceptions`。
+- 需要新增错误码时，先对齐 `docs/历史资料/阶段契约/m1_contracts.md`，再补 `ApiExceptions`。

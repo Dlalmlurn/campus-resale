@@ -6,11 +6,11 @@
 
 本计划基于以下文档和当前代码：
 
-- `docs/阶段契约/m1_contracts.md`
-- `docs/02_domain_contracts.md`
-- `docs/05_database_design.md`
+- `../阶段契约/m1_contracts.md`
+- `../../正式文档/02_domain_contracts.md`
+- `../../正式文档/05_database_design.md`
 - `短期并行推进计划.md`
-- `docs/项目进程记录/M1_A成员身份会话实现记录.md`
+- `M1_A成员身份会话实现记录.md`
 - `backend/src/main/resources/db/migration/V1__foundation_schema.sql` 到 `V5__tighten_username_rules.sql`
 - `backend/src/main/java/com/campusresale/identity` 与 `backend/src/main/java/com/campusresale/platform`
 

@@ -2,7 +2,7 @@
 
 本文件定义 M1「认证与商品 MVP」的短期开发契约。它不是长期产品目标文档，也不是最终 OpenAPI 说明；它用于四人并行开发时固定接口路径、数据形状、状态枚举、迁移编号和验收边界。
 
-正式业务口径仍以 `00_project_baseline.md`、`02_domain_contracts.md` 和 `05_database_design.md` 为准。如果本文件与正式编号文档冲突，以正式编号文档为准。
+正式业务口径仍以 `../../正式文档/00_project_baseline.md`、`../../正式文档/02_domain_contracts.md` 和 `../../正式文档/05_database_design.md` 为准。如果本文件与正式编号文档冲突，以正式编号文档为准。
 
 ## M1 范围
 

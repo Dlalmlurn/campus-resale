@@ -72,6 +72,29 @@
 | Admin Analytics API | 读取用户、商品、订单、支付、退款、举报、活跃度、信用和日志统计。 |
 | Intelligence API | 创建异步发布辅助任务、保存输入摘要、返回发布建议和审核预检标签、记录采纳状态、处理配额、超时、重试和全局开关。 |
 
+## 已落地接口路径索引
+
+本节记录当前工程已实现的稳定 REST / WebSocket 路径，方便正式口径和代码实现对齐。它只固定接口名和职责，不替代请求响应字段说明或 OpenAPI 文档。
+
+| 接口族 | 已落地路径 |
+| --- | --- |
+| Health | `GET /api/health` |
+| Identity API | `POST /api/auth/register`；`POST /api/auth/login`；`POST /api/auth/logout`；`GET /api/auth/me` |
+| Catalog API | `GET /api/categories`；`GET /api/tags`；`GET /api/campus-places` |
+| File API | `POST /api/files`；`GET /api/files/{id}`；`GET /api/files/{id}/content` |
+| Campus Auth API | `GET /api/verifications/me`；`PUT /api/verifications/me`；`POST /api/verifications/me/submit`；`GET /api/admin/verifications`；`POST /api/admin/verifications/{id}/approve`；`POST /api/admin/verifications/{id}/reject` |
+| Goods API | `POST /api/goods/drafts`；`PATCH /api/goods/{id}`；`POST /api/goods/{id}/submit`；`GET /api/goods/mine`；`GET /api/goods`；`GET /api/goods/{id}`；`GET /api/admin/goods`；`POST /api/admin/goods/{id}/approve`；`POST /api/admin/goods/{id}/reject` |
+| Conversation API | `POST /api/conversations`；`GET /api/conversations`；`GET /api/conversations/{id}`；`GET /api/conversations/{id}/messages`；`POST /api/conversations/{id}/messages`；`POST /api/conversations/{id}/image-messages`；`POST /api/conversations/{id}/bargain-cards`；`POST /api/conversations/{id}/bargain-cards/{cardId}/accept`；`POST /api/conversations/{id}/bargain-cards/{cardId}/reject`；`POST /api/conversations/{id}/archive`；`POST /api/conversations/{id}/unarchive`；`POST /api/conversations/{id}/block`；`GET /api/admin/conversations/{id}` |
+| Realtime API | `WS /ws/conversations` |
+| Order API | `POST /api/orders`；`GET /api/orders`；`GET /api/orders/{id}`；`POST /api/orders/{id}/seller-confirm`；`POST /api/orders/{id}/seller-reject`；`POST /api/orders/{id}/buyer-cancel`；`POST /api/orders/{id}/completion-requests`；`POST /api/orders/{id}/completion-requests/{requestId}/confirm` |
+| Payment / Settlement / Refund API | `POST /api/orders/{id}/payments/simulate`；`GET /api/orders/{id}/payment`；`GET /api/orders/{id}/payment/transactions`；`GET /api/orders/{id}/settlement`；`GET /api/orders/{id}/refunds`；`POST /api/orders/{id}/refunds`；`GET /api/admin/payments`；`GET /api/admin/refunds`；`POST /api/admin/refunds/{id}/decide`；`GET /api/admin/settlements`；`POST /api/admin/settlements/{id}/advance`；`POST /api/admin/settlements/advance-due` |
+| Review API | `POST /api/orders/{id}/reviews`；`GET /api/orders/{id}/reviews` |
+| Notification API | `GET /api/notifications`；`GET /api/notifications/unread-count`；`POST /api/notifications/{id}/read`；`POST /api/notifications/read-all` |
+| Governance / Credit / Interaction API | `GET /api/n3/governance-overview`；`POST /api/n3/reports`；`GET /api/n3/reports`；`POST /api/n3/appeals`；`GET /api/n3/appeals`；`POST /api/n3/refunds`；`GET /api/n3/refunds`；`GET /api/n3/credit/me`；`POST /api/n3/favorites/{goodsId}`；`DELETE /api/n3/favorites/{goodsId}`；`GET /api/n3/favorites`；`POST /api/n3/follows/{userId}`；`DELETE /api/n3/follows/{userId}`；`GET /api/n3/follows` |
+| Admin Governance API | `GET /api/admin/n3/queue`；`GET /api/admin/n3/reports`；`POST /api/admin/n3/reports/{id}/handle`；`GET /api/admin/n3/appeals`；`POST /api/admin/n3/appeals/{id}/review`；`GET /api/admin/n3/refunds`；`POST /api/admin/n3/refunds/{id}/decide`；`POST /api/admin/n3/penalties`；`POST /api/admin/n3/penalties/{id}/lift` |
+| Audit / Analytics API | `GET /api/admin/operation-logs`；`GET /api/admin/sensitive-access-logs`；`GET /api/admin/stats/dashboard`；`GET /api/admin/stats/order-trend` |
+| Intelligence API | `POST /api/intelligence/goods-assist` |
+
 ## 事件族
 
 领域事件用于描述已经发生的事实，事件名称不要求成为最终代码名称，但语义应稳定。
