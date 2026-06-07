@@ -1,0 +1,109 @@
+# 公网 HTTPS 生产编排（独立文件，与本地 compose.yaml 区分）。
+#
+# 拓扑：
+#   浏览器 --HTTPS(443)--> caddy --(80)--> frontend(nginx) --/api,/ws--> backend(8080)
+#   backend --> postgres / minio（仅容器内网，不对外暴露端口）
+#
+# 与本地编排的关键差异：
+#   1. 仅 caddy 对外发布 80/443，其余服务都只在内网通信，缩小攻击面。
+#   2. caddy 自动申请并续期 Let's Encrypt 证书（需公网域名解析到本机 + 放行 80/443）。
+#   3. backend 打开 Cookie Secure、把 CORS/CSRF Origin 收敛到真实 HTTPS 域名。
+#   4. 数据库、MinIO、AI 密钥全部来自 .env.prod，不使用开发默认值。
+#
+# 启动：
+#   cp .env.prod.example .env.prod
+#   # 编辑 .env.prod 填好域名、邮箱与各类密码/密钥
+#   docker compose --env-file .env.prod -f compose.prod.yaml up -d --build
+
+services:
+  postgres:
+    image: docker.1ms.run/library/postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set in .env.prod}
+      POSTGRES_USER: ${POSTGRES_USER:?set in .env.prod}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set a strong password in .env.prod}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  minio:
+    image: quay.io/minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set in .env.prod}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set a strong secret in .env.prod}
+    volumes:
+      - minio-data:/data
+    # 控制台仅绑定本机回环，便于运维 SSH 隧道访问，不直接暴露到公网。
+    ports:
+      - "127.0.0.1:9001:9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      CAMPUS_RESALE_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      CAMPUS_RESALE_DB_USERNAME: ${POSTGRES_USER}
+      CAMPUS_RESALE_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      # 浏览器经 HTTPS 访问，Origin/Referer 必须收敛到真实前端域名。
+      CAMPUS_RESALE_CORS_ALLOWED_ORIGINS: https://${PUBLIC_DOMAIN}
+      # 打开后登录 Cookie 带 Secure，仅经加密连接回传。
+      CAMPUS_RESALE_COOKIE_SECURE: "true"
+      CAMPUS_RESALE_STORAGE_ENDPOINT: http://minio:9000
+      CAMPUS_RESALE_STORAGE_BUCKET: ${MINIO_BUCKET:-campus-resale}
+      CAMPUS_RESALE_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER}
+      CAMPUS_RESALE_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      # AI 发布辅助：填入 api-key 后走 DeepSeek，否则自动退回稳健规则引擎。
+      CAMPUS_RESALE_AI_ENABLED: ${CAMPUS_RESALE_AI_ENABLED:-false}
+      CAMPUS_RESALE_AI_PROVIDER: ${CAMPUS_RESALE_AI_PROVIDER:-deepseek}
+      CAMPUS_RESALE_AI_BASE_URL: ${CAMPUS_RESALE_AI_BASE_URL:-https://api.deepseek.com}
+      CAMPUS_RESALE_AI_API_KEY: ${CAMPUS_RESALE_AI_API_KEY:-}
+      CAMPUS_RESALE_AI_MODEL: ${CAMPUS_RESALE_AI_MODEL:-deepseek-chat}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?set your public domain in .env.prod}
+      ACME_EMAIL: ${ACME_EMAIL:?set an email for Let's Encrypt in .env.prod}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      frontend:
+        condition: service_started
+
+volumes:
+  postgres-data:
+  minio-data:
+  caddy-data:
+  caddy-config:

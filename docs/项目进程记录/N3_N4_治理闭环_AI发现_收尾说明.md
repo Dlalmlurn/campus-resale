@@ -18,6 +18,8 @@
 - AI 权限与频率：`/api/intelligence/goods-assist` 按用户、场景、当天次数限制调用，默认每日 5 次。
 - AI 审计：每次 AI 发布辅助都会记录后台操作日志，关联 `INTELLIGENCE_RECORD`。
 - AI 生成留存：标题、描述、价格、优化建议、分类、标签、风险原因和提醒会写入 `ai_assist_records`。
+- AI 双引擎：`campus-resale.ai` 配置 DeepSeek（OpenAI 兼容）后由 LLM 生成文案，未配置或调用失败时自动退回稳健规则引擎；响应 `assistSource` 标识来源（`LLM` / `RULES`），前端展示来源徽章。
+- AI 风险兜底：风险判定以规则引擎为下限。即使 LLM 判低风险，命中高风险词仍强制按更高风险提示，LLM 不能把风险降级。
 - AI 裁决边界：AI 只给建议和风险提醒，不会自动审核、下架、封禁或处罚。
 - 高风险提醒：命中高风险词时，会给用户发送 `AI_REVIEW_REMINDER` 站内通知，提示人工修改后再提交审核。
 - 发布页接入：卖家发布商品页提供“AI 发布辅助”，可生成标题、描述、分类、标签和风险说明，并支持一键应用文案。
@@ -26,10 +28,13 @@
 
 ## 演示路径
 
-1. 使用演示账号登录。
-   - 普通已认证学生：`student_demo / 520zikejiang`
-   - 内容管理员：`content_admin / 520zikejiang`
-   - 超级管理员：`super_admin / 520zikejiang`
+1. 使用演示账号登录（统一密码 `520zikejiang`）。
+   - 卖家（已认证，名下有在售商品）：`seller_demo`
+   - 买家（已认证）：`buyer_demo`
+   - 普通已认证学生：`student_demo`
+   - 内容管理员：`content_admin`
+   - 超级管理员：`super_admin`
+   - 完整演示路径见 [`docs/答辩/演示台本.md`](../答辩/演示台本.md)。
 2. 进入“商品”页，查看推荐理由，点击商品卡片底部的“收藏”和“关注卖家”。
 3. 进入“发布”页，填写商品标题、描述、价格，点击“生成优化建议”，展示 AI 分类、标签、风险和审计提醒。
 4. 用包含“代写”等高风险词的商品文案触发 AI 风险提醒，再进入“通知”页查看 AI 风险通知。
@@ -61,6 +66,7 @@ curl http://localhost:8080/actuator/health
 本分支新增 Flyway 迁移：
 
 - `V20__n4_ai_review_notifications.sql`：补齐 `AI_REVIEW_REMINDER` 通知类型约束。
+- `V21__seed_demo_buyer_seller.sql`：补齐 `seller_demo` / `buyer_demo` 已认证学生账号与 seller_demo 在售商品，使买卖双方闭环可直接演示。
 
 如果本机 Docker Desktop 未启动，可以先运行：
 
@@ -72,7 +78,9 @@ docker compose config
 
 ## 部署收口提醒
 
-- 公网 HTTPS 部署时，后端需要把 `CAMPUS_RESALE_CORS_ALLOWED_ORIGINS` 改成真实前端域名。
-- 生产环境 Cookie 应启用 Secure，并确认 SameSite、CORS、CSRF Origin 校验和反向代理域名一致。
-- PostgreSQL、MinIO 密码不要使用 `.env.example` 的开发默认值。
-- 答辩前建议固定一套截图：商品发现页、发布 AI 辅助、治理队列、信用页、通知页和后台审计日志。
+- 公网 HTTPS 一键部署：`docker compose --env-file .env.prod -f compose.prod.yaml up -d --build`，详见 [`docs/部署/HTTPS部署与运维说明.md`](../部署/HTTPS部署与运维说明.md)。
+- 该编排前置 Caddy 自动申请/续期证书，并已固定 `CAMPUS_RESALE_COOKIE_SECURE=true`、`CAMPUS_RESALE_CORS_ALLOWED_ORIGINS=https://<域名>`，登录 Cookie 追加 `Secure`。
+- 后端新增 `campus-resale.security.cookie-secure` 开关（环境变量 `CAMPUS_RESALE_COOKIE_SECURE`），本地 HTTP 默认 false，HTTPS 部署置 true。
+- PostgreSQL、MinIO、DeepSeek 密钥均来自 `.env.prod`（被 `.gitignore` 排除），仓库只保留 `.env.prod.example` 模板，不要使用开发默认值。
+- 如需启用真实 AI：填 `CAMPUS_RESALE_AI_API_KEY` 并设 `CAMPUS_RESALE_AI_ENABLED=true`；留空则自动走规则引擎，演示不依赖外网。
+- 答辩材料见 [`docs/答辩/`](../答辩/)：演示台本、验收清单、截图清单。

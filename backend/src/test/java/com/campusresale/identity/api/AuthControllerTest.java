@@ -2,6 +2,7 @@
 package com.campusresale.identity.api;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.nullable;
@@ -77,6 +78,8 @@ class AuthControllerTest {
                 .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("CR_SESSION=raw-token")))
                 .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("HttpOnly")))
                 .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("SameSite=Lax")))
+                // 默认（本地 HTTP）不带 Secure，避免本地登录 Cookie 因 Secure 而无法回传。
+                .andExpect(header().string(HttpHeaders.SET_COOKIE, not(containsString("Secure"))))
                 .andExpect(jsonPath("$.username").value("student_demo"))
                 .andExpect(jsonPath("$.canTrade").value(true));
     }

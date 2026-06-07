@@ -31,7 +31,8 @@ class FileServiceTest {
     private final SystemConfigRepository systemConfigRepository = org.mockito.Mockito.mock(SystemConfigRepository.class);
     private final CampusResaleProperties properties = new CampusResaleProperties(
             new CampusResaleProperties.Cors(List.of("http://localhost:5173")),
-            new CampusResaleProperties.Storage("http://localhost:9000", "bucket", "access", "secret")
+            new CampusResaleProperties.Storage("http://localhost:9000", "bucket", "access", "secret"),
+            new CampusResaleProperties.Ai(false, "deepseek", "https://api.deepseek.com", "", "deepseek-chat", 6000)
     );
     private final FileService fileService = new FileService(
             objectStorageClient,
