@@ -440,10 +440,21 @@ public class CampusVerificationRepository {
         boolean hasVerifiedDocument = snapshot.get().factors().stream()
                 .anyMatch(factor -> factor.factorType().isDocumentType()
                         && factor.status() == CampusFactorStatus.VERIFIED);
+        Long activeTradePenalty = jdbcTemplate.queryForObject("""
+                        SELECT COUNT(*)
+                        FROM penalty_records
+                        WHERE user_id = ?
+                          AND status = 'ACTIVE'
+                          AND penalty_type IN ('TRADE_RESTRICT', 'ACCOUNT_LOCK')
+                        """,
+                Long.class,
+                userId
+        );
         boolean canTrade = auth.status() == CampusVerificationStatus.APPROVED
                 && auth.score() >= 60
                 && hasVerifiedDocument
-                && hasVerifiedStudentRole;
+                && hasVerifiedStudentRole
+                && (activeTradePenalty == null || activeTradePenalty == 0);
         return Optional.of(new CampusTradeEligibility(auth.status().name(), canTrade));
     }
 

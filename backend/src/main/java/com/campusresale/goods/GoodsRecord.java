@@ -21,6 +21,7 @@ public record GoodsRecord(
         GoodsStatus status,
         GoodsAuditStatus auditStatus,
         Long primaryImageFileId,
+        String recommendationReason,
         Instant publishedAt,
         Instant createdAt,
         Instant updatedAt
@@ -41,6 +42,7 @@ public record GoodsRecord(
                 new SellerSummary(sellerId, sellerNickname),
                 new CategorySummary(categoryId, categoryCode, categoryName, null),
                 primaryImage,
+                recommendationReason,
                 publishedAt
         );
     }

@@ -200,6 +200,9 @@ public class N3GovernanceService {
                 .orElseThrow(() -> ApiExceptions.notFound("举报记录不存在"));
         auditLogRepository.recordOperation(admin.id(), "N3_REPORT_HANDLE", "REPORT", reportId, before, after, ipAddress);
         auditLogRepository.recordSensitiveAccess(admin.id(), "REPORT_EVIDENCE", reportId, "处理举报证据", "SUCCESS", ipAddress);
+        if ("UPHELD".equals(status)) {
+            repository.applyUpheldReportEffects(reportId, before.targetType(), before.targetId(), request.penaltyUserId(), admin.id(), note);
+        }
         if ("UPHELD".equals(status) && request.penaltyUserId() != null) {
             String penaltyType = oneOf(defaultText(request.penaltyType(), "WARNING").toUpperCase(), PENALTY_TYPES, "penaltyType");
             createPenaltyInternal(request.penaltyUserId(), reportId, null, penaltyType, note, admin, ipAddress);
@@ -218,6 +221,7 @@ public class N3GovernanceService {
         auditLogRepository.recordOperation(admin.id(), "N3_APPEAL_REVIEW", "APPEAL", appealId, before, after, ipAddress);
         auditLogRepository.recordSensitiveAccess(admin.id(), "APPEAL_EVIDENCE", appealId, "审核申诉证据", "SUCCESS", ipAddress);
         if ("APPROVED".equals(status)) {
+            repository.liftActivePenaltiesForReport(before.reportId(), admin.id(), appealId, Instant.now());
             repository.insertCreditRecord(before.appellant().id(), "APPEAL", appealId, "申诉通过，信用影响已修正", 5, "申诉通过", admin.id());
         }
         notificationService.create(before.appellant().id(), NotificationType.APPEAL_REVIEWED, "申诉审核完成", "你的申诉审核结果为 " + status + "。", "APPEAL", appealId, null);

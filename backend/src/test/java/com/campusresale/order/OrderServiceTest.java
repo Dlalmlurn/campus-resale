@@ -186,6 +186,7 @@ class OrderServiceTest {
                 status,
                 auditStatus,
                 10L,
+                "成色较新，适合优先比较",
                 Instant.parse("2026-06-01T00:00:00Z"),
                 Instant.parse("2026-06-01T00:00:00Z"),
                 Instant.parse("2026-06-01T00:00:00Z")

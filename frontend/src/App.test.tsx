@@ -155,6 +155,51 @@ describe("App", () => {
 
     await waitFor(() => expect(screen.getByText("0 条未读")).toBeInTheDocument());
   });
+
+  it("opens the polished N3 governance workspace from the main navigation", async () => {
+    stubBackend(contentAdmin);
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByText("内容管理员")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "治理" }));
+
+    await waitFor(() => expect(screen.getByText("治理与信用中心")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "举报处理" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "申诉复核" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "处罚处理" })).toBeInTheDocument();
+    expect(screen.getByText("信用画像")).toBeInTheDocument();
+    expect(screen.getByText("商品描述与实际成色不一致，需要管理员核实。")).toBeInTheDocument();
+  });
+
+  it("shows AI publishing assistance and discovery reasons", async () => {
+    stubBackend(verifiedSeller);
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByText("数据库原理教材")).toBeInTheDocument());
+    expect(screen.getByText("推荐理由：教材资料匹配你的浏览偏好")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "发布" }));
+    await waitFor(() => expect(screen.getByText("AI 发布辅助")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("商品标题"), { target: { value: "旧书" } });
+    fireEvent.change(screen.getByLabelText("商品描述"), { target: { value: "数据库课程复习资料，包含笔记。" } });
+    fireEvent.click(screen.getByRole("button", { name: "生成优化建议" }));
+
+    await waitFor(() => expect(screen.getByText("数据库课程复习资料")).toBeInTheDocument());
+    expect(screen.getByText("AI 仅提供辅助建议，不会自动审核、下架或处罚。")).toBeInTheDocument();
+  });
+
+  it("lets buyers favorite goods and follow sellers from discovery cards", async () => {
+    stubBackend(verifiedBuyer);
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByText("数据库原理教材")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "收藏 数据库原理教材" }));
+    await waitFor(() => expect(screen.getByText("已收藏商品")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "关注 晨晨" }));
+
+    await waitFor(() => expect(screen.getByText("已关注卖家")).toBeInTheDocument());
+  });
 });
 
 function stubBackend(currentUser?: CurrentUser) {
@@ -234,6 +279,8 @@ function stubBackend(currentUser?: CurrentUser) {
       total: 1
     });
     if (url === "/api/notifications/read-all") return response({ updatedCount: 1 });
+    if (url === "/api/n3/favorites/10") return response({ active: true });
+    if (url === "/api/n3/follows/3") return response({ active: true });
     if (url === "/api/orders/77/payment") return response({
       id: 501,
       paymentNo: "PAY202606050001",
@@ -246,6 +293,17 @@ function stubBackend(currentUser?: CurrentUser) {
       closedAt: null
     });
     if (url === "/api/orders/77/seller-confirm") return response({ ...pendingOrder(), status: "PENDING_PAYMENT" });
+    if (url === "/api/intelligence/goods-assist") return response({
+      optimizedTitle: "数据库课程复习资料",
+      optimizedDescription: "适合数据库原理期末复习，包含重点笔记，建议补充版本和新旧程度。",
+      suggestedCategoryCode: "BOOKS",
+      suggestedTags: ["教材资料", "期末复习"],
+      riskLevel: "LOW",
+      riskReasons: ["未发现明显禁售词"],
+      recommendationReason: "根据标题和描述判断更适合教材资料分类",
+      auditReminder: "AI 仅提供辅助建议，不会自动审核、下架或处罚。",
+      requestId: 501
+    });
     if (url === "/api/n3/governance-overview") {
       return response({
         reports: [{
@@ -276,7 +334,7 @@ function stubBackend(currentUser?: CurrentUser) {
           publicTags: ["有完成交易记录", "暂无有效处罚"],
           internalScore: 82,
           internalLevel: "B",
-          recentRecords: [],
+          recentRecords: [{ id: 1, sourceType: "ORDER", sourceId: 77, reason: "完成交易", internalDeltaValue: 2, publicLabel: "履约记录", createdAt: "2026-06-05T12:00:00Z" }],
           updatedAt: "2026-06-05T12:00:00Z"
         },
         adminQueue: currentUser?.roles.includes("CONTENT_ADMIN") ? {
@@ -295,9 +353,32 @@ function stubBackend(currentUser?: CurrentUser) {
             evidenceFileIds: [],
             createdAt: "2026-06-05T11:20:00Z"
           }],
-          pendingAppeals: [],
+          pendingAppeals: [{
+            id: 41,
+            reportId: 39,
+            appellant: { id: 11, nickname: "小林同学" },
+            description: "商品成色说明已补充，申请复核。",
+            status: "PENDING_REVIEW",
+            reviewedByAdminId: null,
+            reviewedAt: null,
+            reviewNote: null,
+            evidenceFileIds: [],
+            createdAt: "2026-06-05T12:00:00Z"
+          }],
           pendingRefunds: [],
-          activePenalties: []
+          activePenalties: [{
+            id: 5,
+            user: { id: 11, nickname: "小林同学" },
+            reportId: 39,
+            appealId: null,
+            penaltyType: "TRADE_RESTRICT",
+            reason: "举报成立后临时限制交易",
+            status: "ACTIVE",
+            createdByAdminId: 1,
+            liftedByAdminId: null,
+            liftedAt: null,
+            createdAt: "2026-06-05T12:30:00Z"
+          }]
         } : null
       });
     }
@@ -315,7 +396,8 @@ function stubBackend(currentUser?: CurrentUser) {
           seller: { id: 3, nickname: "晨晨" },
           category: { id: 1, code: "BOOKS", name: "教材资料" },
           primaryImage: null,
-          publishedAt: "2026-05-25T00:00:00Z"
+          publishedAt: "2026-05-25T00:00:00Z",
+          recommendationReason: "教材资料匹配你的浏览偏好"
         }],
         page: 1,
         pageSize: 20,

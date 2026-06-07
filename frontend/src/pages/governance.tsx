@@ -137,6 +137,20 @@ export function GovernancePage(props: { currentUser: CurrentUser; notify: Notify
 
       {!overview ? <LoadingBlock /> : (
         <>
+          <section className="governance-tabs" aria-label="治理工作台入口">
+            <button type="button">举报处理</button>
+            <button type="button">申诉复核</button>
+            <button type="button">处罚处理</button>
+            <button type="button">信用概览</button>
+          </section>
+
+          <section className="section-title-row">
+            <div>
+              <p className="eyebrow">信用聚合</p>
+              <h2>信用画像</h2>
+            </div>
+            <span className="badge neutral">订单 / 评价 / 处罚聚合</span>
+          </section>
           <section className="governance-metrics" aria-label="信用摘要">
             <Metric title="信用等级" value={overview.credit.internalLevel} text={`${overview.credit.internalScore} 分`} />
             <Metric title="完成交易" value={overview.credit.fulfillmentCount} text="含待结算完成单" />
@@ -243,7 +257,7 @@ export function GovernancePage(props: { currentUser: CurrentUser; notify: Notify
               <div className="governance-board">
                 <RecordColumn title="举报处理" empty="没有待处理举报">
                   {adminQueue.pendingReports.map((item) => (
-                    <RecordRow key={item.id} title={`举报 #${item.id} · ${item.reporter.nickname}`} badge={reportStatusLabels[item.status] ?? item.status} text={item.description}>
+                    <RecordRow key={item.id} title={`举报 #${item.id} · ${item.reporter.nickname}`} badge={reportStatusLabels[item.status] ?? item.status} text={`待核实内容：${item.description}`}>
                       <button className="secondary-button compact" disabled={busy} type="button" onClick={() => void run(() => handleReport(item.id, { status: "UPHELD", handlingNote: "管理员核实举报成立", penaltyUserId: item.targetType === "USER" ? item.targetId : null, penaltyType: "WARNING" }), "举报已处理")}>成立</button>
                       <button className="text-button" disabled={busy} type="button" onClick={() => void run(() => handleReport(item.id, { status: "REJECTED", handlingNote: "证据不足，举报不成立" }), "举报已驳回")}>驳回</button>
                     </RecordRow>

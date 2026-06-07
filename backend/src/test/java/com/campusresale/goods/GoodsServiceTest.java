@@ -92,6 +92,29 @@ class GoodsServiceTest {
     }
 
     @Test
+    void publicListAcceptsRecommendedSortAndReturnsRecommendationReason() {
+        GoodsRecord book = goods(GoodsStatus.ON_SALE, GoodsAuditStatus.APPROVED);
+        when(goodsRepository.listPublic(any(GoodsRepository.SearchCriteria.class), eq(1), eq(20))).thenReturn(List.of(book));
+        when(goodsRepository.countPublic(any(GoodsRepository.SearchCriteria.class))).thenReturn(1L);
+
+        com.campusresale.platform.api.PageResponse<GoodsSummary> page = service.publicList(
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "RECOMMENDED",
+                1,
+                20
+        );
+
+        assertThat(page.items()).hasSize(1);
+        assertThat(page.items().getFirst().recommendationReason()).isEqualTo("教材资料匹配你的浏览偏好");
+        verify(goodsRepository).listPublic(any(GoodsRepository.SearchCriteria.class), eq(1), eq(20));
+    }
+
+    @Test
     void submitBlocksForbiddenTermAndRecordsRuleHit() {
         CurrentPrincipal principal = principal(1L, Set.of("REGISTERED_USER", "VERIFIED_STUDENT"));
         GoodsRecord draft = new GoodsRecord(
@@ -111,6 +134,7 @@ class GoodsServiceTest {
                 GoodsStatus.DRAFT,
                 GoodsAuditStatus.NOT_SUBMITTED,
                 10L,
+                "教材资料匹配你的浏览偏好",
                 null,
                 Instant.parse("2026-06-01T00:00:00Z"),
                 Instant.parse("2026-06-01T00:00:00Z")
@@ -148,6 +172,7 @@ class GoodsServiceTest {
                 status,
                 auditStatus,
                 10L,
+                "教材资料匹配你的浏览偏好",
                 status == GoodsStatus.ON_SALE ? Instant.parse("2026-06-01T00:00:00Z") : null,
                 Instant.parse("2026-06-01T00:00:00Z"),
                 Instant.parse("2026-06-01T00:00:00Z")

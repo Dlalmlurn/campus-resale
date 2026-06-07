@@ -399,7 +399,7 @@ public class GoodsService {
         if (sort == null || sort.isBlank() || "LATEST".equals(sort)) {
             return "LATEST";
         }
-        if ("PRICE_ASC".equals(sort) || "PRICE_DESC".equals(sort)) {
+        if ("PRICE_ASC".equals(sort) || "PRICE_DESC".equals(sort) || "RECOMMENDED".equals(sort)) {
             return sort;
         }
         throw ApiExceptions.validation("商品排序方式不支持", Map.of("field", "sort"));
