@@ -401,7 +401,7 @@ const data = await response.json();
 
 ### 文档
 
-- `docs/N2_AUDIT_API_GUIDE.md`（本文件）
+- `docs/开发指南/N2_AUDIT_API_GUIDE.md`（本文件）
 
 ---
 

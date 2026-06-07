@@ -4,7 +4,7 @@ package com.campusresale.identity.api;
 import java.util.List;
 
 /**
- * 当前登录用户响应 DTO，对齐 docs/阶段契约/m1_contracts.md 中的 CurrentUser 结构。
+ * 当前登录用户响应 DTO，对齐 docs/历史资料/阶段契约/m1_contracts.md 中的 CurrentUser 结构。
  */
 public record CurrentUserResponse(
         /** 用户 id，对应 users.id。 */

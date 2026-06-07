@@ -4,7 +4,7 @@ package com.campusresale.platform.api;
 import java.util.Map;
 
 /**
- * 统一 API 错误响应结构，字段与 docs/阶段契约/m1_contracts.md 的错误契约保持一致。
+ * 统一 API 错误响应结构，字段与 docs/历史资料/阶段契约/m1_contracts.md 的错误契约保持一致。
  */
 public record ApiErrorResponse(
         /** 业务错误码，例如 AUTH_REQUIRED、VALIDATION_FAILED。 */

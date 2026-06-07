@@ -92,8 +92,8 @@ B 成员认证表合并后，需要恢复完整规则：
 
 - `README.md`
 - `短期并行推进计划.md`
-- `docs/阶段契约/m1_contracts.md`
-- `docs/项目进程记录/M1_A成员身份会话实现记录.md`
+- `../阶段契约/m1_contracts.md`
+- `M1_A成员身份会话实现记录.md`
 - `backend/src/main/java/com/campusresale/identity/README.md`
 - `backend/src/main/resources/db/migration/README.md`
 

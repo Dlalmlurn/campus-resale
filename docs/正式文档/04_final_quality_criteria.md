@@ -118,4 +118,4 @@
 - [ ] 编号文档只描述稳定目标、模块边界、领域契约和最终质量标准。
 - [ ] 小范围补充优先写入既有章节，不因单个问题新增文档。
 - [ ] ADR 只记录会改变长期架构、模块边界、核心状态机、资金链路、治理链路、AI 使用边界或关键一致性约束的分叉决策。
-- [ ] 正式口径以 `docs/00_project_baseline.md`、`docs/01_project_shape.md`、`docs/02_domain_contracts.md`、`docs/05_database_design.md` 和本文为准。
+- [ ] 正式口径以 `docs/正式文档/00_project_baseline.md`、`docs/正式文档/01_project_shape.md`、`docs/正式文档/02_domain_contracts.md`、`docs/正式文档/05_database_design.md` 和本文为准。

@@ -1,6 +1,6 @@
 # Campus Resale
 
-校园二手交易平台工程基座，按 `docs/00_project_baseline.md` 的技术口径启动：Spring Boot 模块化单体、React 前端、PostgreSQL、Flyway migration、MinIO 对象存储和 Docker Compose。
+校园二手交易平台工程基座，按 `docs/正式文档/00_project_baseline.md` 的技术口径启动：Spring Boot 模块化单体、React 前端、PostgreSQL、Flyway migration、MinIO 对象存储和 Docker Compose。
 
 ## Quick Start
 

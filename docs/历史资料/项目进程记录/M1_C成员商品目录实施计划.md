@@ -8,7 +8,7 @@
 
 采用这个名字的原因：
 
-- 与 `短期并行推进计划.md` 和 `docs/阶段契约/m1_contracts.md` 中 C 成员建议分支保持一致。
+- 与 `短期并行推进计划.md` 和 `../阶段契约/m1_contracts.md` 中 C 成员建议分支保持一致。
 - 表达范围足够明确：商品、分类、审核、搜索都属于 goods catalog 主线。
 - 不绑定具体人名，后续如果需要多人接手 C 模块，分支语义仍然清楚。
 
@@ -18,12 +18,12 @@
 
 本计划基于以下文档和当前 `main` 分支代码：
 
-- `docs/阶段契约/m1_contracts.md`
-- `docs/02_domain_contracts.md`
-- `docs/05_database_design.md`
+- `../阶段契约/m1_contracts.md`
+- `../../正式文档/02_domain_contracts.md`
+- `../../正式文档/05_database_design.md`
 - `短期并行推进计划.md`
-- `docs/项目进程记录/M1_A成员身份会话实现记录.md`
-- `docs/项目进程记录/M1_B成员文件校园认证实施计划.md`
+- `M1_A成员身份会话实现记录.md`
+- `M1_B成员文件校园认证实施计划.md`
 - `backend/src/main/resources/db/migration/V1__foundation_schema.sql` 到 `V8__campus_auth_configs.sql`
 - `backend/src/main/java/com/campusresale/identity`
 - `backend/src/main/java/com/campusresale/files`
@@ -80,7 +80,7 @@ C 成员负责 M1 后半段闭环：
 - `V11__goods_search_seed_data.sql`
 - 少量可读占位图商品种子数据，具体对象存储写入方式在构建时按本地工程约束落地。
 - 商品模块基础单元测试和 repository/service 状态流转测试。
-- 商品接口遵守 `docs/阶段契约/m1_contracts.md` 的响应结构、分页结构和错误码。
+- 商品接口遵守 `../阶段契约/m1_contracts.md` 的响应结构、分页结构和错误码。
 
 ### 暂不交付
 

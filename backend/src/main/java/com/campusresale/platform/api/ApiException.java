@@ -16,7 +16,7 @@ public class ApiException extends RuntimeException {
     private final HttpStatus status;
 
     /**
-     * 业务错误码，对齐 docs/阶段契约/m1_contracts.md。
+     * 业务错误码，对齐 docs/历史资料/阶段契约/m1_contracts.md。
      */
     private final String code;
 

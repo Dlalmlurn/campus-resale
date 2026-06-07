@@ -1,4 +1,4 @@
-// 文件功能：全局捕获 Controller 异常，并转换为 docs/阶段契约/m1_contracts.md 约定的错误 JSON。
+// 文件功能：全局捕获 Controller 异常，并转换为 docs/历史资料/阶段契约/m1_contracts.md 约定的错误 JSON。
 package com.campusresale.platform.api;
 
 import jakarta.servlet.http.HttpServletRequest;
