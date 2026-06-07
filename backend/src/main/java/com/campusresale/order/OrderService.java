@@ -1,5 +1,7 @@
 package com.campusresale.order;
 
+import com.campusresale.conversation.AcceptedBargainQuote;
+import com.campusresale.conversation.ConversationService;
 import com.campusresale.goods.GoodsAuditStatus;
 import com.campusresale.goods.GoodsRecord;
 import com.campusresale.goods.GoodsRepository;
@@ -33,15 +35,18 @@ public class OrderService {
 
     private final OrderRepository orderRepository;
     private final GoodsRepository goodsRepository;
+    private final ConversationService conversationService;
     private final NotificationService notificationService;
 
     public OrderService(
             OrderRepository orderRepository,
             GoodsRepository goodsRepository,
+            ConversationService conversationService,
             NotificationService notificationService
     ) {
         this.orderRepository = orderRepository;
         this.goodsRepository = goodsRepository;
+        this.conversationService = conversationService;
         this.notificationService = notificationService;
     }
 
@@ -64,13 +69,18 @@ public class OrderService {
         }
 
         Instant now = Instant.now();
+        AcceptedBargainQuote quote = request.acceptedBargainCardId() == null
+                ? null
+                : conversationService.validateAcceptedBargainForOrder(goodsId, buyer.id(), request.acceptedBargainCardId());
         String note = optionalTrimmed(request.note(), MAX_NOTE_LENGTH, "note", "订单备注最多 500 个字符");
         long orderId = orderRepository.createOrder(new OrderWriteData(
                 generateNo("ORD"),
                 goodsId,
+                quote == null ? null : quote.conversationId(),
+                quote == null ? null : quote.cardId(),
                 buyer.id(),
                 goods.sellerId(),
-                goods.listPrice(),
+                quote == null ? goods.listPrice() : quote.amount(),
                 TradeOrderStatus.PENDING_SELLER_CONFIRM,
                 request.tradePlaceId() == null ? goods.tradePlaceId() : request.tradePlaceId(),
                 optionalTrimmed(

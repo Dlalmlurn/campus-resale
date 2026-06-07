@@ -8,6 +8,8 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.campusresale.conversation.AcceptedBargainQuote;
+import com.campusresale.conversation.ConversationService;
 import com.campusresale.goods.ConditionLevel;
 import com.campusresale.goods.GoodsAuditStatus;
 import com.campusresale.goods.GoodsRecord;
@@ -28,8 +30,9 @@ class OrderServiceTest {
 
     private final OrderRepository orderRepository = org.mockito.Mockito.mock(OrderRepository.class);
     private final GoodsRepository goodsRepository = org.mockito.Mockito.mock(GoodsRepository.class);
+    private final ConversationService conversationService = org.mockito.Mockito.mock(ConversationService.class);
     private final NotificationService notificationService = org.mockito.Mockito.mock(NotificationService.class);
-    private final OrderService service = new OrderService(orderRepository, goodsRepository, notificationService);
+    private final OrderService service = new OrderService(orderRepository, goodsRepository, conversationService, notificationService);
 
     @Test
     void createOrderReservesGoodsAndNotifiesSeller() {
@@ -41,7 +44,7 @@ class OrderServiceTest {
         when(orderRepository.findOrderById(500L)).thenReturn(Optional.of(order(TradeOrderStatus.PENDING_SELLER_CONFIRM)));
 
         OrderResponse response = service.create(
-                new CreateOrderRequest(100L, null, null, null, "今晚可面交"),
+                new CreateOrderRequest(100L, null, null, null, null, "今晚可面交"),
                 principal(2L)
         );
 
@@ -49,6 +52,26 @@ class OrderServiceTest {
         verify(goodsRepository).reserveForOrder(100L, 500L);
         verify(orderRepository).insertStateRecord(500L, null, TradeOrderStatus.PENDING_SELLER_CONFIRM, "ORDER_CREATED", 2L, null, null);
         verify(notificationService).notifyOrderCreated(1L, 500L, "九成新显示器");
+    }
+
+    @Test
+    void createOrderUsesAcceptedBargainAmountFromConversation() {
+        GoodsRecord goods = goods(GoodsStatus.ON_SALE, GoodsAuditStatus.APPROVED);
+        when(goodsRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(goods));
+        when(goodsRepository.currentOccupiedOrderId(100L)).thenReturn(null);
+        when(conversationService.validateAcceptedBargainForOrder(100L, 2L, 88L))
+                .thenReturn(new AcceptedBargainQuote(20L, 88L, new BigDecimal("360.00")));
+        when(orderRepository.createOrder(any())).thenReturn(500L);
+        when(goodsRepository.reserveForOrder(100L, 500L)).thenReturn(1);
+        when(orderRepository.findOrderById(500L)).thenReturn(Optional.of(order(TradeOrderStatus.PENDING_SELLER_CONFIRM)));
+
+        service.create(new CreateOrderRequest(100L, 88L, null, null, null, null), principal(2L));
+
+        verify(orderRepository).createOrder(org.mockito.ArgumentMatchers.argThat(data ->
+                data.conversationId().equals(20L)
+                        && data.acceptedBargainCardId().equals(88L)
+                        && data.frozenAmount().compareTo(new BigDecimal("360.00")) == 0
+        ));
     }
 
     @Test
@@ -147,6 +170,8 @@ class OrderServiceTest {
                 100L,
                 "九成新显示器",
                 10L,
+                null,
+                null,
                 2L,
                 "买家",
                 1L,

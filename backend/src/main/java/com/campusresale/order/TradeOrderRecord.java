@@ -9,6 +9,8 @@ public record TradeOrderRecord(
         long goodsId,
         String goodsTitle,
         Long primaryImageFileId,
+        Long conversationId,
+        Long acceptedBargainCardId,
         long buyerId,
         String buyerNickname,
         long sellerId,

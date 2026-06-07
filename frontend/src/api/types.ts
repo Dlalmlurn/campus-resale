@@ -113,6 +113,8 @@ export interface OrderSummary {
   goodsId: number;
   goodsTitle: string;
   primaryImageFileId?: number | null;
+  conversationId?: number | null;
+  acceptedBargainCardId?: number | null;
   buyer: OrderParticipant;
   seller: OrderParticipant;
   frozenAmount: string;
@@ -129,6 +131,7 @@ export interface OrderSummary {
 
 export interface CreateOrderRequest {
   goodsId: number;
+  acceptedBargainCardId?: number | null;
   tradePlaceId: number | null;
   tradePlaceDetail: string;
   meetupTime: string | null;
@@ -168,4 +171,53 @@ export interface ReviewSummary {
   submittedAt: string;
   modifiedUntil?: string | null;
   visibleAt?: string | null;
+}
+
+export interface ConversationParticipant {
+  id: number;
+  nickname: string;
+}
+
+export interface ConversationSummary {
+  id: number;
+  goodsId: number;
+  goodsTitle: string;
+  primaryImageFileId?: number | null;
+  buyer: ConversationParticipant;
+  seller: ConversationParticipant;
+  status: string;
+  lastMessageText?: string | null;
+  lastMessageAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MessageSummary {
+  id: number;
+  conversationId: number;
+  sender?: ConversationParticipant | null;
+  messageType: string;
+  status: string;
+  textContent?: string | null;
+  cardId?: number | null;
+  sentAt: string;
+}
+
+export interface BargainCardSummary {
+  id: number;
+  conversationId: number;
+  amount: string;
+  note?: string | null;
+  actionStatus: string;
+  createdByUserId: number;
+  actedByUserId?: number | null;
+  createdAt: string;
+  expiresAt?: string | null;
+  actedAt?: string | null;
+}
+
+export interface ConversationDetail {
+  conversation: ConversationSummary;
+  messages: MessageSummary[];
+  bargainCards: BargainCardSummary[];
 }

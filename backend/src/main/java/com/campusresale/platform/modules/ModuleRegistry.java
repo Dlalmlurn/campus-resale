@@ -11,7 +11,7 @@ public class ModuleRegistry {
             new ModuleDescriptor("M02", "goods", "com.campusresale.goods", "PLANNED"),
             new ModuleDescriptor("M03", "intelligence", "com.campusresale.intelligence", "PLANNED"),
             new ModuleDescriptor("M04", "discovery", "com.campusresale.discovery", "PLANNED"),
-            new ModuleDescriptor("M05", "conversation", "com.campusresale.conversation", "PLANNED"),
+            new ModuleDescriptor("M05", "conversation", "com.campusresale.conversation", "IN_PROGRESS"),
             new ModuleDescriptor("M06", "order", "com.campusresale.order", "PLANNED"),
             new ModuleDescriptor("M07", "payment", "com.campusresale.payment", "PLANNED"),
             new ModuleDescriptor("M08", "reputation", "com.campusresale.reputation", "PLANNED"),

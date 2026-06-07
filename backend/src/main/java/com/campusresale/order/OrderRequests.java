@@ -9,6 +9,7 @@ public final class OrderRequests {
 
     public record CreateOrderRequest(
             Long goodsId,
+            Long acceptedBargainCardId,
             Long tradePlaceId,
             String tradePlaceDetail,
             Instant meetupTime,

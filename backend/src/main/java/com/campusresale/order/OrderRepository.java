@@ -22,6 +22,8 @@ public class OrderRepository {
                    o.goods_id,
                    g.title AS goods_title,
                    pi.file_id AS primary_image_file_id,
+                   o.conversation_id,
+                   o.accepted_bargain_card_id,
                    o.buyer_id,
                    buyer.nickname AS buyer_nickname,
                    o.seller_id,
@@ -120,6 +122,8 @@ public class OrderRepository {
                         INSERT INTO trade_orders (
                             order_no,
                             goods_id,
+                            conversation_id,
+                            accepted_bargain_card_id,
                             buyer_id,
                             seller_id,
                             frozen_amount,
@@ -132,12 +136,14 @@ public class OrderRepository {
                             created_at,
                             updated_at
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}'::jsonb, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}'::jsonb, ?, ?)
                         RETURNING id
                         """,
                 Long.class,
                 data.orderNo(),
                 data.goodsId(),
+                data.conversationId(),
+                data.acceptedBargainCardId(),
                 data.buyerId(),
                 data.sellerId(),
                 data.frozenAmount(),
@@ -591,6 +597,8 @@ public class OrderRepository {
     public record OrderWriteData(
             String orderNo,
             long goodsId,
+            Long conversationId,
+            Long acceptedBargainCardId,
             long buyerId,
             long sellerId,
             BigDecimal frozenAmount,
@@ -613,6 +621,8 @@ public class OrderRepository {
                     resultSet.getLong("goods_id"),
                     resultSet.getString("goods_title"),
                     resultSet.getObject("primary_image_file_id", Long.class),
+                    resultSet.getObject("conversation_id", Long.class),
+                    resultSet.getObject("accepted_bargain_card_id", Long.class),
                     resultSet.getLong("buyer_id"),
                     resultSet.getString("buyer_nickname"),
                     resultSet.getLong("seller_id"),
