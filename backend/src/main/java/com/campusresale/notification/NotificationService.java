@@ -175,6 +175,54 @@ public class NotificationService {
         );
     }
 
+    public NotificationRecord notifyMessageReceived(long receiverId, long conversationId, String goodsTitle) {
+        return create(
+                receiverId,
+                NotificationType.MESSAGE_RECEIVED,
+                "收到新的私信",
+                "关于「" + displayGoodsTitle(goodsTitle) + "」有新的会话消息。",
+                "CONVERSATION",
+                conversationId,
+                null
+        );
+    }
+
+    public NotificationRecord notifyBargainOffered(long sellerId, long conversationId, String goodsTitle) {
+        return create(
+                sellerId,
+                NotificationType.BARGAIN_OFFERED,
+                "收到新的议价",
+                "买家为「" + displayGoodsTitle(goodsTitle) + "」发起了议价，请在会话中处理。",
+                "CONVERSATION",
+                conversationId,
+                null
+        );
+    }
+
+    public NotificationRecord notifyBargainAccepted(long buyerId, long conversationId, String goodsTitle) {
+        return create(
+                buyerId,
+                NotificationType.BARGAIN_ACCEPTED,
+                "议价已接受",
+                "卖家已接受「" + displayGoodsTitle(goodsTitle) + "」的议价，可以用协商价下单。",
+                "CONVERSATION",
+                conversationId,
+                null
+        );
+    }
+
+    public NotificationRecord notifyBargainRejected(long buyerId, long conversationId, String goodsTitle) {
+        return create(
+                buyerId,
+                NotificationType.BARGAIN_REJECTED,
+                "议价已拒绝",
+                "卖家已拒绝「" + displayGoodsTitle(goodsTitle) + "」的议价。",
+                "CONVERSATION",
+                conversationId,
+                null
+        );
+    }
+
     private int normalizePage(int page) {
         if (page < 1) {
             throw ApiExceptions.validation("页码必须大于等于 1", Map.of("field", "page"));

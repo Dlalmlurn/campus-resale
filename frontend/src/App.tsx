@@ -13,6 +13,7 @@ import {
   Home,
   LogIn,
   LogOut,
+  MessageSquareText,
   PackagePlus,
   RefreshCw,
   Search,
@@ -25,6 +26,7 @@ import {
 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError } from "./api/client";
+import { createConversation } from "./api/conversations";
 import {
   createGoodsDraft,
   getAdminGoods,
@@ -63,6 +65,7 @@ import type {
   TagSummary
 } from "./api/types";
 import { OrderDetailPage, OrdersPage } from "./pages/orders";
+import { ConversationDetailPage, ConversationsPage } from "./pages/conversations";
 import { AdminDashboardPage } from "./pages/admin-dashboard";
 import { AdminAuditLogsPage } from "./pages/admin-audit-logs";
 import { GovernancePage } from "./pages/governance";
@@ -70,6 +73,8 @@ import { GovernancePage } from "./pages/governance";
 type Route =
   | { name: "market" }
   | { name: "goods"; id: number }
+  | { name: "conversations" }
+  | { name: "conversation"; id: number }
   | { name: "orders" }
   | { name: "order"; id: number }
   | { name: "notifications" }
@@ -182,7 +187,7 @@ export function App() {
   }, [refreshGoods]);
 
   useEffect(() => {
-    if ((route.name === "orders" || route.name === "order" || route.name === "notifications") && authChecked && currentUser === null) {
+    if ((route.name === "orders" || route.name === "order" || route.name === "conversations" || route.name === "conversation" || route.name === "notifications") && authChecked && currentUser === null) {
       notify("error", "请先登录后继续");
       navigate({ name: "auth" });
       return;
@@ -194,7 +199,7 @@ export function App() {
   }, [authChecked, currentUser, navigate, notify, route.name]);
 
   const guardedNavigate = (next: Route) => {
-    if (!currentUser && (next.name === "verification" || next.name === "seller" || next.name === "admin" || next.name === "orders" || next.name === "order" || next.name === "notifications")) {
+    if (!currentUser && (next.name === "verification" || next.name === "seller" || next.name === "admin" || next.name === "orders" || next.name === "order" || next.name === "conversations" || next.name === "conversation" || next.name === "notifications")) {
       notify("error", "请先登录后继续");
       navigate({ name: "auth" });
       return;
@@ -244,6 +249,7 @@ export function App() {
         </button>
         <nav className="main-nav" aria-label="主要导航">
           <NavButton active={route.name === "market"} icon={<Home size={17} />} label="商品" onClick={() => navigate({ name: "market" })} />
+          <NavButton active={route.name === "conversations" || route.name === "conversation"} icon={<MessageSquareText size={17} />} label="会话" onClick={() => guardedNavigate({ name: "conversations" })} />
           <NavButton active={route.name === "orders" || route.name === "order"} icon={<ClipboardList size={17} />} label="订单" onClick={() => guardedNavigate({ name: "orders" })} />
           {currentUser && (
             <NavButton active={route.name === "notifications"} icon={<Bell size={17} />} label="通知" onClick={() => guardedNavigate({ name: "notifications" })} />
@@ -299,6 +305,8 @@ export function App() {
           />
         )}
         {route.name === "goods" && <GoodsDetailPage id={route.id} catalog={catalog} currentUser={currentUser} navigate={navigate} onBack={() => navigate({ name: "market" })} notify={notify} />}
+        {route.name === "conversations" && currentUser && <ConversationsPage currentUser={currentUser} notify={notify} onOpenConversation={(id) => navigate({ name: "conversation", id })} />}
+        {route.name === "conversation" && currentUser && <ConversationDetailPage id={route.id} currentUser={currentUser} places={catalog.places} notify={notify} onBack={() => navigate({ name: "conversations" })} onOpenOrder={(id) => navigate({ name: "order", id })} />}
         {route.name === "orders" && currentUser && <OrdersPage currentUser={currentUser} notify={notify} onOpenOrder={(id) => navigate({ name: "order", id })} />}
         {route.name === "order" && currentUser && <OrderDetailPage id={route.id} currentUser={currentUser} notify={notify} onBack={() => navigate({ name: "orders" })} />}
         {route.name === "notifications" && currentUser && <NotificationsPage notify={notify} onOpenOrder={(id) => navigate({ name: "order", id })} />}
@@ -418,12 +426,39 @@ function GoodsDetailPage(props: { id: number; catalog: Catalog; currentUser: Cur
     setOrderOpen(true);
   };
 
+  const openConversation = async () => {
+    if (!props.currentUser) {
+      props.notify("error", "请先登录后继续");
+      props.navigate({ name: "auth" });
+      return;
+    }
+    if (!props.currentUser.canTrade) {
+      props.notify("error", "完成校园认证后才能联系卖家");
+      props.navigate({ name: "verification" });
+      return;
+    }
+    if (props.currentUser.id === item.seller.id) {
+      props.notify("error", "不能和自己发布的商品建立会话");
+      return;
+    }
+    setBusy(true);
+    try {
+      const detail = await createConversation(item.id);
+      props.navigate({ name: "conversation", id: detail.conversation.id });
+    } catch (error) {
+      props.notify("error", messageOf(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const submitOrder = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
     try {
       const created = await createOrder({
         goodsId: item.id,
+        acceptedBargainCardId: null,
         tradePlaceId: Number(orderForm.tradePlaceId) || null,
         tradePlaceDetail: orderForm.tradePlaceDetail,
         meetupTime: orderForm.meetupTime ? new Date(orderForm.meetupTime).toISOString() : null,
@@ -458,6 +493,7 @@ function GoodsDetailPage(props: { id: number; catalog: Catalog; currentUser: Cur
           </dl>
           <div className="order-entry">
             <button className="primary-button" type="button" onClick={openOrder}>立即下单</button>
+            <button className="secondary-button" disabled={busy} type="button" onClick={() => void openConversation()}><MessageSquareText size={17} /> 联系卖家</button>
             <button className="secondary-button" type="button" onClick={() => props.navigate({ name: "orders" })}>查看我的订单</button>
           </div>
           {orderOpen && (
@@ -1002,13 +1038,15 @@ function EmptyBlock({ title }: { title: string }) {
 function parseRoute(): Route {
   const value = window.location.hash.replace(/^#\/?/, "") || "market";
   if (value.startsWith("goods/")) return { name: "goods", id: Number(value.split("/")[1]) };
+  if (value.startsWith("conversations/")) return { name: "conversation", id: Number(value.split("/")[1]) };
   if (value.startsWith("orders/")) return { name: "order", id: Number(value.split("/")[1]) };
-  if (["market", "orders", "notifications", "auth", "verification", "seller", "admin"].includes(value)) return { name: value as Route["name"] } as Route;
+  if (["market", "conversations", "orders", "notifications", "auth", "verification", "seller", "admin"].includes(value)) return { name: value as Route["name"] } as Route;
   return { name: "market" };
 }
 
 function routeHash(route: Route) {
   if (route.name === "goods") return `#/goods/${route.id}`;
+  if (route.name === "conversation") return `#/conversations/${route.id}`;
   if (route.name === "order") return `#/orders/${route.id}`;
   return `#/${route.name}`;
 }
@@ -1032,7 +1070,11 @@ function notificationTypeLabel(value: string) {
     PAYMENT_ESCROWED: "支付托管",
     COMPLETION_REQUESTED: "完成确认",
     ORDER_COMPLETED: "订单完成",
-    SETTLEMENT_STATUS_CHANGED: "结算状态"
+    SETTLEMENT_STATUS_CHANGED: "结算状态",
+    MESSAGE_RECEIVED: "私信消息",
+    BARGAIN_OFFERED: "收到议价",
+    BARGAIN_ACCEPTED: "议价接受",
+    BARGAIN_REJECTED: "议价拒绝"
   } as Record<string, string>)[value] ?? value;
 }
 

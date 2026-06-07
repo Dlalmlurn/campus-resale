@@ -122,6 +122,8 @@ class OrderControllerTest {
                 100L,
                 "九成新显示器",
                 10L,
+                null,
+                null,
                 new OrderResponse.ParticipantSummary(2L, "买家"),
                 new OrderResponse.ParticipantSummary(1L, "卖家"),
                 "399.00",
