@@ -302,6 +302,7 @@ function stubBackend(currentUser?: CurrentUser) {
       riskReasons: ["未发现明显禁售词"],
       recommendationReason: "根据标题和描述判断更适合教材资料分类",
       auditReminder: "AI 仅提供辅助建议，不会自动审核、下架或处罚。",
+      assistSource: "RULES",
       requestId: 501
     });
     if (url === "/api/n3/governance-overview") {

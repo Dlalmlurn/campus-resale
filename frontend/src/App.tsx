@@ -235,7 +235,8 @@ export function App() {
 
   const handleDemoLogin = async (username: string) => {
     try {
-      const user = await login(username, "demo-password");
+      // 演示账号统一密码（见 V4/V21 种子数据）。
+      const user = await login(username, "520zikejiang");
       setCurrentUser(user);
       notify("success", `已切换到${user.nickname}`);
     } catch (error) {
@@ -876,7 +877,8 @@ function SellerPage(props: { catalog: Catalog; notify: Notify }) {
               <p>{aiAdvice.optimizedDescription}</p>
               <div className="badge-row">
                 <span className="badge neutral">{aiAdvice.suggestedCategoryCode}</span>
-                <span className={`badge ${aiAdvice.riskLevel === "HIGH" ? "danger" : "success"}`}>风险 {aiAdvice.riskLevel}</span>
+                <span className={`badge ${aiAdvice.riskLevel === "HIGH" ? "danger" : aiAdvice.riskLevel === "MEDIUM" ? "warning" : "success"}`}>风险 {aiAdvice.riskLevel}</span>
+                <span className="badge neutral">{aiAdvice.assistSource === "LLM" ? "AI 模型生成" : "规则引擎"}</span>
               </div>
               <p className="recommendation-reason">推荐理由：{aiAdvice.recommendationReason}</p>
               <p className="form-hint">{aiAdvice.riskReasons.join(" / ")}</p>

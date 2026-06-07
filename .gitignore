@@ -6,6 +6,7 @@ source_materials/
 .env
 .env.*
 !.env.example
+!.env.prod.example
 *.local
 application-local.yml
 application-local.yaml

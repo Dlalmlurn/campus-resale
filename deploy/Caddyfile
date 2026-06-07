@@ -1,0 +1,32 @@
+# Caddy 反向代理配置：终止 TLS 并把全部流量转发给前端容器（nginx）。
+# 前端容器内部已把 /api 与 /ws 反代到 backend，因此这里只需代理到 frontend:80。
+#
+# 自动 HTTPS：
+#   Caddy 会用 PUBLIC_DOMAIN 自动向 Let's Encrypt 申请并续期证书，
+#   前提是该域名已解析到本机，且公网放行 80/443。
+#
+# 无公网域名（仅用 IP 或内网做答辩演示）时，可把下面 site 块改为：
+#   :443 {
+#       tls internal
+#       reverse_proxy frontend:80
+#   }
+#   Caddy 会签发本地自签证书，浏览器需手动信任。
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$PUBLIC_DOMAIN} {
+	encode gzip zstd
+
+	# 安全响应头：强制 HTTPS、禁止 MIME 嗅探、限制点击劫持。
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+
+	# WebSocket（会话实时通道）与普通请求统一交给前端容器，由其内部 nginx 再分流。
+	reverse_proxy frontend:80
+}

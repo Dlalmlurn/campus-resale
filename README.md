@@ -61,6 +61,8 @@ A 成员身份会话分支提供 `/api/auth/register`、`/api/auth/login`、`/ap
 | --- | --- | --- |
 | `content_admin` | `CONTENT_ADMIN` | 内容管理员，允许多端登录，便于联调。 |
 | `super_admin` | `SUPER_ADMIN` | 超级管理员，只允许单端登录。 |
+| `seller_demo` | `REGISTERED_USER`, `VERIFIED_STUDENT` | 卖家演示账号，名下有在售商品（V21 种子）。 |
+| `buyer_demo` | `REGISTERED_USER`, `VERIFIED_STUDENT` | 买家演示账号，演示完整下单闭环（V21 种子）。 |
 | `student_demo` | `REGISTERED_USER`, `VERIFIED_STUDENT` | 已认证学生演示账号。 |
 | `user_demo` | `REGISTERED_USER` | 普通注册用户演示账号。 |
 
@@ -91,3 +93,33 @@ B 成员文件与校园认证分支提供 `/api/files/*`、`/api/verifications/*
 ```
 
 M1 中 `PUT /api/verifications/me` 不会自动进入审核队列；提交审核必须已有学生证或校园卡材料。`student_demo` 已补齐认证表种子数据，用于演示完整交易权限。
+
+## AI 发布辅助（N4）
+
+`POST /api/intelligence/goods-assist` 提供商品发布优化建议。采用"LLM + 稳健规则"双引擎：
+
+- 配置 `campus-resale.ai`（DeepSeek，OpenAI 兼容）后由 LLM 生成文案；未配置或调用失败时自动退回本地规则引擎，离线/答辩均可用。
+- 响应 `assistSource` 标识来源（`LLM` / `RULES`）。
+- 风险判定以规则引擎为下限：即使 LLM 判低风险，命中高风险词仍强制按更高风险提示并发治理提醒，AI 不会自动审核/下架/处罚。
+- 默认每人每天 5 次，调用写入 `ai_assist_records` 与后台审计日志。
+
+环境变量（留空 `CAMPUS_RESALE_AI_API_KEY` 即走规则引擎）：
+
+```bash
+CAMPUS_RESALE_AI_ENABLED=true
+CAMPUS_RESALE_AI_BASE_URL=https://api.deepseek.com
+CAMPUS_RESALE_AI_API_KEY=sk-xxx
+CAMPUS_RESALE_AI_MODEL=deepseek-chat
+```
+
+## 生产部署（HTTPS）
+
+一键起带自动 HTTPS 的生产栈：
+
+```bash
+cp .env.prod.example .env.prod   # 填域名、邮箱、强密码、可选 AI 密钥
+docker compose --env-file .env.prod -f compose.prod.yaml up -d --build
+```
+
+前置 Caddy 自动申请/续期证书，后端固定开启 Cookie `Secure` 并把 CORS/CSRF Origin 收敛到真实域名。
+详见 [`docs/部署/HTTPS部署与运维说明.md`](docs/部署/HTTPS部署与运维说明.md)，答辩材料见 [`docs/答辩/`](docs/答辩/)。

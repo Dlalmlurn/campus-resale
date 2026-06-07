@@ -14,6 +14,7 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -34,10 +35,20 @@ public class AuthController {
     private final AuthService authService;
 
     /**
-     * 构造 AuthController，Spring 会自动注入 AuthService。
+     * 是否在登录 Cookie 上追加 Secure 属性。
+     * 公网 HTTPS 部署应通过 CAMPUS_RESALE_COOKIE_SECURE=true 打开，本地 HTTP 联调保持 false。
      */
-    public AuthController(AuthService authService) {
+    private final boolean cookieSecure;
+
+    /**
+     * 构造 AuthController，Spring 会自动注入 AuthService 和 Cookie Secure 开关。
+     */
+    public AuthController(
+            AuthService authService,
+            @Value("${campus-resale.security.cookie-secure:false}") boolean cookieSecure
+    ) {
         this.authService = authService;
+        this.cookieSecure = cookieSecure;
     }
 
     /**
@@ -99,8 +110,8 @@ public class AuthController {
     private void writeSessionCookie(HttpServletResponse response, AuthResult result) {
         // Servlet Cookie API 没有 SameSite 属性，使用响应头追加以满足 M1 Cookie 契约。
         response.addHeader(HttpHeaders.SET_COOKIE,
-                "%s=%s; Max-Age=%d; Path=/; HttpOnly; SameSite=Lax"
-                        .formatted(SecurityProperties.SESSION_COOKIE_NAME, result.rawSessionToken(), result.idleTtlSeconds()));
+                "%s=%s; Max-Age=%d; Path=/; HttpOnly; SameSite=Lax%s"
+                        .formatted(SecurityProperties.SESSION_COOKIE_NAME, result.rawSessionToken(), result.idleTtlSeconds(), secureAttribute()));
     }
 
     /**
@@ -109,8 +120,15 @@ public class AuthController {
     private void clearSessionCookie(HttpServletResponse response) {
         // Max-Age=0 是浏览器删除 Cookie 的标准方式。
         response.addHeader(HttpHeaders.SET_COOKIE,
-                "%s=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax"
-                        .formatted(SecurityProperties.SESSION_COOKIE_NAME));
+                "%s=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax%s"
+                        .formatted(SecurityProperties.SESSION_COOKIE_NAME, secureAttribute()));
+    }
+
+    /**
+     * 按配置返回 Cookie 的 Secure 属性片段；HTTPS 部署下追加 "; Secure"，本地 HTTP 返回空串。
+     */
+    private String secureAttribute() {
+        return cookieSecure ? "; Secure" : "";
     }
 
     /**

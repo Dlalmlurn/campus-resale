@@ -18,7 +18,8 @@ class OriginCsrfInterceptorTest {
     private final OriginCsrfInterceptor interceptor = new OriginCsrfInterceptor(
             new CampusResaleProperties(
                     new CampusResaleProperties.Cors(List.of("http://localhost:5173")),
-                    new CampusResaleProperties.Storage("http://localhost:9000", "bucket", "access", "secret")
+                    new CampusResaleProperties.Storage("http://localhost:9000", "bucket", "access", "secret"),
+                    new CampusResaleProperties.Ai(false, "deepseek", "https://api.deepseek.com", "", "deepseek-chat", 6000)
             )
     );
 

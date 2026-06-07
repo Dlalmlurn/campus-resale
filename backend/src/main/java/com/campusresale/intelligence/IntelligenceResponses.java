@@ -16,7 +16,9 @@ public final class IntelligenceResponses {
             String riskLevel,
             List<String> riskReasons,
             String recommendationReason,
-            String auditReminder
+            String auditReminder,
+            // 建议来源：LLM 表示由大模型生成，RULES 表示退回规则引擎；便于前端与答辩区分。
+            String assistSource
     ) {
     }
 }
