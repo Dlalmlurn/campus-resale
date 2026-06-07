@@ -1,6 +1,7 @@
 package com.campusresale.order;
 
 import com.campusresale.order.OrderRequests.CreateOrderRequest;
+import com.campusresale.order.OrderRequests.RefundRequest;
 import com.campusresale.order.OrderRequests.ReasonRequest;
 import com.campusresale.order.OrderRequests.ReviewRequest;
 import com.campusresale.platform.api.ApiExceptions;
@@ -91,6 +92,34 @@ public class OrderController {
     @GetMapping("/{id}/payment")
     public PaymentResponse paymentStatus(@PathVariable long id, HttpServletRequest servletRequest) {
         return orderService.paymentStatus(id, principal(servletRequest));
+    }
+
+    @RequireLogin
+    @GetMapping("/{id}/payment/transactions")
+    public List<PaymentTransactionResponse> paymentTransactions(@PathVariable long id, HttpServletRequest servletRequest) {
+        return orderService.paymentTransactions(id, principal(servletRequest));
+    }
+
+    @RequireLogin
+    @GetMapping("/{id}/settlement")
+    public SettlementResponse settlementStatus(@PathVariable long id, HttpServletRequest servletRequest) {
+        return orderService.settlementStatus(id, principal(servletRequest));
+    }
+
+    @RequireLogin
+    @GetMapping("/{id}/refunds")
+    public List<RefundResponse> refunds(@PathVariable long id, HttpServletRequest servletRequest) {
+        return orderService.refunds(id, principal(servletRequest));
+    }
+
+    @RequireTradeEligible
+    @PostMapping("/{id}/refunds")
+    public RefundResponse createRefund(
+            @PathVariable long id,
+            @RequestBody RefundRequest request,
+            HttpServletRequest servletRequest
+    ) {
+        return orderService.createRefund(id, request, principal(servletRequest));
     }
 
     @RequireTradeEligible

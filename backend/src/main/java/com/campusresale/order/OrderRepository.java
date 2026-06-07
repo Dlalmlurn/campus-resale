@@ -109,6 +109,35 @@ public class OrderRepository {
             FROM reviews
             """;
 
+    private static final String REFUND_SELECT = """
+            SELECT ro.id,
+                   ro.refund_no,
+                   ro.order_id,
+                   ro.payment_order_id,
+                   ro.requested_by_user_id,
+                   requester.nickname AS requester_nickname,
+                   ro.amount,
+                   ro.refund_type,
+                   ro.reason,
+                   ro.status,
+                   ro.status_before_refund,
+                   ro.decision_by_admin_id,
+                   ro.decision_note,
+                   ro.reviewed_at,
+                   ro.processed_at,
+                   ro.provider_refund_no,
+                   ro.failure_reason,
+                   ro.created_at,
+                   COALESCE(array_agg(ref.file_id ORDER BY ref.file_id) FILTER (WHERE ref.file_id IS NOT NULL), '{}') AS evidence_file_ids
+            FROM refund_orders ro
+            JOIN users requester ON requester.id = ro.requested_by_user_id
+            LEFT JOIN refund_evidence_files ref ON ref.refund_order_id = ro.id
+            """;
+
+    private static final String REFUND_GROUP = """
+            GROUP BY ro.id, requester.nickname
+            """;
+
     private final JdbcTemplate jdbcTemplate;
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
 
@@ -281,6 +310,13 @@ public class OrderRepository {
         ).stream().findFirst();
     }
 
+    public Optional<PaymentOrderRecord> findPaymentByIdForUpdate(long paymentId) {
+        return jdbcTemplate.query(PAYMENT_SELECT + " WHERE id = ? FOR UPDATE",
+                new PaymentOrderRowMapper(),
+                paymentId
+        ).stream().findFirst();
+    }
+
     public Optional<PaymentOrderRecord> findEscrowedPaymentByOrder(long orderId) {
         return jdbcTemplate.query(PAYMENT_SELECT + """
                         WHERE order_id = ?
@@ -328,6 +364,35 @@ public class OrderRepository {
         );
     }
 
+    public int insertPaymentCallbackIfAbsent(
+            long paymentOrderId,
+            String provider,
+            String callbackNo,
+            String payloadHash,
+            String processedStatus,
+            Instant processedAt
+    ) {
+        return jdbcTemplate.update("""
+                        INSERT INTO payment_callback_logs (
+                            payment_order_id,
+                            provider,
+                            callback_no,
+                            payload_hash,
+                            processed_status,
+                            processed_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        ON CONFLICT (provider, callback_no) DO NOTHING
+                        """,
+                paymentOrderId,
+                provider,
+                callbackNo,
+                payloadHash,
+                processedStatus,
+                Timestamp.from(processedAt)
+        );
+    }
+
     public void insertPaymentTransaction(String transactionNo, long paymentOrderId, BigDecimal amount, Instant occurredAt) {
         jdbcTemplate.update("""
                         INSERT INTO payment_transactions (
@@ -346,6 +411,25 @@ public class OrderRepository {
                 transactionNo,
                 amount,
                 Timestamp.from(occurredAt)
+        );
+    }
+
+    public List<PaymentTransactionRecord> listPaymentTransactionsByOrder(long orderId) {
+        return jdbcTemplate.query("""
+                        SELECT pt.id,
+                               pt.payment_order_id,
+                               pt.transaction_no,
+                               pt.amount,
+                               pt.status,
+                               pt.provider,
+                               pt.occurred_at
+                        FROM payment_transactions pt
+                        JOIN payment_orders po ON po.id = pt.payment_order_id
+                        WHERE po.order_id = ?
+                        ORDER BY pt.occurred_at DESC, pt.id DESC
+                        """,
+                new PaymentTransactionRowMapper(),
+                orderId
         );
     }
 
@@ -462,6 +546,45 @@ public class OrderRepository {
         ).stream().findFirst();
     }
 
+    public List<SettlementRecord> listSettlements(int page, int pageSize) {
+        return jdbcTemplate.query(SETTLEMENT_SELECT + """
+                        ORDER BY created_at DESC, id DESC
+                        LIMIT ? OFFSET ?
+                        """,
+                new SettlementRowMapper(),
+                pageSize,
+                (page - 1) * pageSize
+        );
+    }
+
+    public List<Long> listDueSettlementIds(Instant now, int limit) {
+        return jdbcTemplate.query("""
+                        SELECT sr.id
+                        FROM settlement_records sr
+                        JOIN trade_orders o ON o.id = sr.order_id
+                        WHERE sr.status IN ('PENDING', 'FAILED')
+                          AND sr.freeze_ends_at <= ?
+                          AND o.status = 'COMPLETED_PENDING_SETTLEMENT'
+                          AND NOT EXISTS (
+                              SELECT 1
+                              FROM refund_orders ro
+                              WHERE ro.order_id = sr.order_id
+                                AND ro.status IN ('PENDING', 'PROCESSING')
+                          )
+                        ORDER BY sr.freeze_ends_at ASC, sr.id ASC
+                        LIMIT ?
+                        """,
+                (rs, rowNum) -> rs.getLong("id"),
+                Timestamp.from(now),
+                limit
+        );
+    }
+
+    public long countSettlements() {
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM settlement_records", Long.class);
+        return total == null ? 0 : total;
+    }
+
     public int nextSettlementAttemptNo(long settlementId) {
         Integer next = jdbcTemplate.queryForObject("""
                         SELECT COALESCE(MAX(attempt_no), 0) + 1
@@ -512,6 +635,274 @@ public class OrderRepository {
                 Timestamp.from(settledAt),
                 settlementId
         );
+    }
+
+    public int markSettlementProcessing(long settlementId, Instant now) {
+        return jdbcTemplate.update("""
+                        UPDATE settlement_records
+                        SET status = 'PROCESSING',
+                            updated_at = ?
+                        WHERE id = ?
+                          AND status IN ('PENDING', 'FAILED')
+                        """,
+                Timestamp.from(now),
+                settlementId
+        );
+    }
+
+    public int markSettlementClosedByOrder(long orderId, String reason, Instant now) {
+        return jdbcTemplate.update("""
+                        UPDATE settlement_records
+                        SET status = 'CLOSED',
+                            failure_reason = ?,
+                            updated_at = ?
+                        WHERE order_id = ?
+                          AND status IN ('PENDING', 'PROCESSING', 'FAILED')
+                        """,
+                reason,
+                Timestamp.from(now),
+                orderId
+        );
+    }
+
+    public int updateSettlementAmountByOrder(long orderId, BigDecimal amount, Instant now) {
+        return jdbcTemplate.update("""
+                        UPDATE settlement_records
+                        SET settlement_amount = ?,
+                            updated_at = ?
+                        WHERE order_id = ?
+                          AND status IN ('PENDING', 'FAILED')
+                        """,
+                amount,
+                Timestamp.from(now),
+                orderId
+        );
+    }
+
+    public long createRefund(
+            String refundNo,
+            long orderId,
+            long paymentOrderId,
+            long requesterId,
+            BigDecimal amount,
+            String refundType,
+            String reason,
+            TradeOrderStatus statusBeforeRefund,
+            Instant now
+    ) {
+        Long id = jdbcTemplate.queryForObject("""
+                        INSERT INTO refund_orders (
+                            refund_no,
+                            order_id,
+                            payment_order_id,
+                            requested_by_user_id,
+                            amount,
+                            refund_type,
+                            reason,
+                            status,
+                            status_before_refund,
+                            created_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)
+                        RETURNING id
+                        """,
+                Long.class,
+                refundNo,
+                orderId,
+                paymentOrderId,
+                requesterId,
+                amount,
+                refundType,
+                reason,
+                statusBeforeRefund.name(),
+                Timestamp.from(now)
+        );
+        return id == null ? 0 : id;
+    }
+
+    public void attachRefundEvidence(long refundId, List<Long> fileIds) {
+        if (fileIds == null || fileIds.isEmpty()) {
+            return;
+        }
+        for (Long fileId : fileIds) {
+            jdbcTemplate.update("""
+                            INSERT INTO refund_evidence_files (refund_order_id, file_id)
+                            VALUES (?, ?)
+                            ON CONFLICT DO NOTHING
+                            """,
+                    refundId,
+                    fileId
+            );
+        }
+    }
+
+    public Optional<RefundOrderRecord> findRefundById(long refundId) {
+        return jdbcTemplate.query(REFUND_SELECT + " WHERE ro.id = ? " + REFUND_GROUP,
+                new RefundOrderRowMapper(),
+                refundId
+        ).stream().findFirst();
+    }
+
+    public Optional<RefundOrderRecord> findRefundByIdForUpdate(long refundId) {
+        List<Long> locked = jdbcTemplate.query("SELECT id FROM refund_orders WHERE id = ? FOR UPDATE",
+                (rs, rowNum) -> rs.getLong("id"),
+                refundId
+        );
+        if (locked.isEmpty()) {
+            return Optional.empty();
+        }
+        return findRefundById(refundId);
+    }
+
+    public List<RefundOrderRecord> listRefundsByOrder(long orderId) {
+        return jdbcTemplate.query(REFUND_SELECT + " WHERE ro.order_id = ? " + REFUND_GROUP + " ORDER BY ro.created_at DESC, ro.id DESC",
+                new RefundOrderRowMapper(),
+                orderId
+        );
+    }
+
+    public List<RefundOrderRecord> listRefundsByUser(long userId) {
+        return jdbcTemplate.query(REFUND_SELECT + " WHERE ro.requested_by_user_id = ? " + REFUND_GROUP + " ORDER BY ro.created_at DESC, ro.id DESC LIMIT 50",
+                new RefundOrderRowMapper(),
+                userId
+        );
+    }
+
+    public List<RefundOrderRecord> listRefundsForAdmin(int page, int pageSize) {
+        return jdbcTemplate.query(REFUND_SELECT + REFUND_GROUP + """
+                        ORDER BY CASE ro.status WHEN 'PENDING' THEN 0 WHEN 'PROCESSING' THEN 1 ELSE 2 END,
+                                 ro.created_at DESC,
+                                 ro.id DESC
+                        LIMIT ? OFFSET ?
+                        """,
+                new RefundOrderRowMapper(),
+                pageSize,
+                (page - 1) * pageSize
+        );
+    }
+
+    public long countRefundsForAdmin() {
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM refund_orders", Long.class);
+        return total == null ? 0 : total;
+    }
+
+    public BigDecimal completedRefundAmount(long paymentOrderId) {
+        BigDecimal amount = jdbcTemplate.queryForObject("""
+                        SELECT COALESCE(SUM(amount), 0)
+                        FROM refund_orders
+                        WHERE payment_order_id = ?
+                          AND status = 'REFUNDED'
+                        """,
+                BigDecimal.class,
+                paymentOrderId
+        );
+        return amount == null ? BigDecimal.ZERO : amount;
+    }
+
+    public BigDecimal activeRefundAmount(long paymentOrderId, Long excludingRefundId) {
+        BigDecimal amount = excludingRefundId == null
+                ? jdbcTemplate.queryForObject("""
+                                SELECT COALESCE(SUM(amount), 0)
+                                FROM refund_orders
+                                WHERE payment_order_id = ?
+                                  AND status IN ('PENDING', 'PROCESSING', 'REFUNDED')
+                                """,
+                        BigDecimal.class,
+                        paymentOrderId
+                )
+                : jdbcTemplate.queryForObject("""
+                                SELECT COALESCE(SUM(amount), 0)
+                                FROM refund_orders
+                                WHERE payment_order_id = ?
+                                  AND status IN ('PENDING', 'PROCESSING', 'REFUNDED')
+                                  AND id <> ?
+                                """,
+                        BigDecimal.class,
+                        paymentOrderId,
+                        excludingRefundId
+                );
+        return amount == null ? BigDecimal.ZERO : amount;
+    }
+
+    public boolean hasActiveRefund(long orderId) {
+        Boolean exists = jdbcTemplate.queryForObject("""
+                        SELECT EXISTS (
+                            SELECT 1
+                            FROM refund_orders
+                            WHERE order_id = ?
+                              AND status IN ('PENDING', 'PROCESSING')
+                        )
+                        """,
+                Boolean.class,
+                orderId
+        );
+        return Boolean.TRUE.equals(exists);
+    }
+
+    public int markRefundProcessing(long refundId, long adminId, String note, Instant now) {
+        return jdbcTemplate.update("""
+                        UPDATE refund_orders
+                        SET status = 'PROCESSING',
+                            decision_by_admin_id = ?,
+                            decision_note = ?,
+                            reviewed_at = ?,
+                            processed_at = NULL
+                        WHERE id = ?
+                          AND status = 'PENDING'
+                        """,
+                adminId,
+                note,
+                Timestamp.from(now),
+                refundId
+        );
+    }
+
+    public int markRefundFinal(
+            long refundId,
+            RefundOrderStatus status,
+            long adminId,
+            String note,
+            String providerRefundNo,
+            String failureReason,
+            Instant now
+    ) {
+        return jdbcTemplate.update("""
+                        UPDATE refund_orders
+                        SET status = ?,
+                            decision_by_admin_id = ?,
+                            decision_note = ?,
+                            reviewed_at = COALESCE(reviewed_at, ?),
+                            processed_at = ?,
+                            provider_refund_no = ?,
+                            failure_reason = ?
+                        WHERE id = ?
+                          AND status IN ('PENDING', 'PROCESSING')
+                        """,
+                status.name(),
+                adminId,
+                note,
+                Timestamp.from(now),
+                Timestamp.from(now),
+                providerRefundNo,
+                failureReason,
+                refundId
+        );
+    }
+
+    public List<PaymentOrderRecord> listPaymentsForAdmin(int page, int pageSize) {
+        return jdbcTemplate.query(PAYMENT_SELECT + """
+                        ORDER BY created_at DESC, id DESC
+                        LIMIT ? OFFSET ?
+                        """,
+                new PaymentOrderRowMapper(),
+                pageSize,
+                (page - 1) * pageSize
+        );
+    }
+
+    public long countPaymentsForAdmin() {
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM payment_orders", Long.class);
+        return total == null ? 0 : total;
     }
 
     public long createReview(
@@ -594,6 +985,11 @@ public class OrderRepository {
         return timestamp == null ? null : timestamp.toInstant();
     }
 
+    private static List<Long> longArray(ResultSet resultSet, String column) throws SQLException {
+        Long[] values = (Long[]) resultSet.getArray(column).getArray();
+        return List.of(values);
+    }
+
     public record OrderWriteData(
             String orderNo,
             long goodsId,
@@ -659,6 +1055,22 @@ public class OrderRepository {
         }
     }
 
+    private static class PaymentTransactionRowMapper implements RowMapper<PaymentTransactionRecord> {
+
+        @Override
+        public PaymentTransactionRecord mapRow(ResultSet resultSet, int rowNum) throws SQLException {
+            return new PaymentTransactionRecord(
+                    resultSet.getLong("id"),
+                    resultSet.getLong("payment_order_id"),
+                    resultSet.getString("transaction_no"),
+                    resultSet.getBigDecimal("amount"),
+                    resultSet.getString("status"),
+                    resultSet.getString("provider"),
+                    resultSet.getTimestamp("occurred_at").toInstant()
+            );
+        }
+    }
+
     private static class CompletionRequestRowMapper implements RowMapper<CompletionRequestRecord> {
 
         @Override
@@ -714,6 +1126,35 @@ public class OrderRepository {
                     resultSet.getTimestamp("submitted_at").toInstant(),
                     resultSet.getTimestamp("modified_until").toInstant(),
                     nullableInstant(resultSet, "visible_at")
+            );
+        }
+    }
+
+    private static class RefundOrderRowMapper implements RowMapper<RefundOrderRecord> {
+
+        @Override
+        public RefundOrderRecord mapRow(ResultSet resultSet, int rowNum) throws SQLException {
+            String statusBeforeRefund = resultSet.getString("status_before_refund");
+            return new RefundOrderRecord(
+                    resultSet.getLong("id"),
+                    resultSet.getString("refund_no"),
+                    resultSet.getLong("order_id"),
+                    resultSet.getObject("payment_order_id", Long.class),
+                    resultSet.getLong("requested_by_user_id"),
+                    resultSet.getString("requester_nickname"),
+                    resultSet.getBigDecimal("amount"),
+                    resultSet.getString("refund_type"),
+                    resultSet.getString("reason"),
+                    RefundOrderStatus.valueOf(resultSet.getString("status")),
+                    statusBeforeRefund == null ? null : TradeOrderStatus.valueOf(statusBeforeRefund),
+                    resultSet.getObject("decision_by_admin_id", Long.class),
+                    resultSet.getString("decision_note"),
+                    nullableInstant(resultSet, "reviewed_at"),
+                    nullableInstant(resultSet, "processed_at"),
+                    resultSet.getString("provider_refund_no"),
+                    resultSet.getString("failure_reason"),
+                    longArray(resultSet, "evidence_file_ids"),
+                    resultSet.getTimestamp("created_at").toInstant()
             );
         }
     }

@@ -8,6 +8,7 @@ import {
   ChevronRight,
   ClipboardList,
   ClipboardCheck,
+  CreditCard,
   FileUp,
   Filter,
   Home,
@@ -68,6 +69,7 @@ import { OrderDetailPage, OrdersPage } from "./pages/orders";
 import { ConversationDetailPage, ConversationsPage } from "./pages/conversations";
 import { AdminDashboardPage } from "./pages/admin-dashboard";
 import { AdminAuditLogsPage } from "./pages/admin-audit-logs";
+import { AdminFundsPage } from "./pages/admin-funds";
 import { GovernancePage } from "./pages/governance";
 
 type Route =
@@ -877,7 +879,7 @@ function NotificationsPage(props: { notify: Notify; onOpenOrder: (id: number) =>
 }
 
 function AdminPage(props: { notify: Notify; navigate: (route: Route) => void }) {
-  const [tab, setTab] = useState<"verification" | "goods" | "dashboard" | "audit">("dashboard");
+  const [tab, setTab] = useState<"verification" | "goods" | "dashboard" | "audit" | "funds">("dashboard");
   const [verifications, setVerifications] = useState<CampusVerification[]>([]);
   const [goods, setGoods] = useState<GoodsSummary[]>([]);
   const [busy, setBusy] = useState(false);
@@ -929,9 +931,10 @@ function AdminPage(props: { notify: Notify; navigate: (route: Route) => void }) 
         <button className="secondary-button compact" type="button" onClick={() => setTab("verification")}>认证审核</button>
         <button className="secondary-button compact" type="button" onClick={() => setTab("goods")}>商品审核</button>
         <button className="secondary-button compact" type="button" onClick={() => setTab("audit")}>查看审计日志</button>
+        <button className="secondary-button compact" type="button" onClick={() => setTab("funds")}>资金管理</button>
         <button className="primary-button compact" type="button" onClick={() => props.navigate({ name: "notifications" })}>通知列表</button>
       </div>
-      {/* 顶部 Tab 导航 —— 4 个功能区 */}
+      {/* 顶部 Tab 导航 */}
       <div className="segmented-control admin-tabs admin-tabs--wide">
         <button
           className={tab === "dashboard" ? "active" : ""}
@@ -963,6 +966,13 @@ function AdminPage(props: { notify: Notify; navigate: (route: Route) => void }) 
         >
           <ShieldAlert size={15} /> 审计日志
         </button>
+        <button
+          className={tab === "funds" ? "active" : ""}
+          type="button"
+          onClick={() => setTab("funds")}
+        >
+          <CreditCard size={15} /> 资金
+        </button>
       </div>
 
       {/* 数据看板 */}
@@ -970,6 +980,8 @@ function AdminPage(props: { notify: Notify; navigate: (route: Route) => void }) 
 
       {/* 审计日志 */}
       {tab === "audit" && <AdminAuditLogsPage notify={props.notify} />}
+
+      {tab === "funds" && <AdminFundsPage notify={props.notify} />}
 
       {/* 审核队列 */}
       {(tab === "verification" || tab === "goods") && (

@@ -150,6 +150,51 @@ export interface PaymentSummary {
   closedAt?: string | null;
 }
 
+export interface PaymentTransactionSummary {
+  id: number;
+  paymentOrderId: number;
+  transactionNo: string;
+  amount: string;
+  status: string;
+  provider: string;
+  occurredAt: string;
+}
+
+export interface SettlementSummary {
+  id: number;
+  orderId: number;
+  paymentOrderId: number;
+  settlementNo: string;
+  settlementAmount: string;
+  status: string;
+  freezeStartedAt: string;
+  freezeEndsAt: string;
+  settledAt?: string | null;
+  failureReason?: string | null;
+}
+
+export interface RefundSummary {
+  id: number;
+  refundNo: string;
+  orderId: number;
+  paymentOrderId?: number | null;
+  requestedByUserId: number;
+  requesterNickname: string;
+  amount: string;
+  refundType: string;
+  reason: string;
+  status: string;
+  statusBeforeRefund?: string | null;
+  decisionByAdminId?: number | null;
+  decisionNote?: string | null;
+  reviewedAt?: string | null;
+  processedAt?: string | null;
+  providerRefundNo?: string | null;
+  failureReason?: string | null;
+  evidenceFileIds: number[];
+  createdAt: string;
+}
+
 export interface CompletionRequestSummary {
   id: number;
   orderId: number;

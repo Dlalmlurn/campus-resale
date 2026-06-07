@@ -10,6 +10,8 @@ import static org.mockito.Mockito.when;
 
 import com.campusresale.conversation.AcceptedBargainQuote;
 import com.campusresale.conversation.ConversationService;
+import com.campusresale.files.FileRepository;
+import com.campusresale.files.FileService;
 import com.campusresale.goods.ConditionLevel;
 import com.campusresale.goods.GoodsAuditStatus;
 import com.campusresale.goods.GoodsRecord;
@@ -19,6 +21,7 @@ import com.campusresale.notification.NotificationService;
 import com.campusresale.order.OrderRequests.CreateOrderRequest;
 import com.campusresale.order.OrderRequests.ReviewRequest;
 import com.campusresale.platform.api.ApiException;
+import com.campusresale.platform.audit.AuditLogRepository;
 import com.campusresale.platform.security.CurrentPrincipal;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -32,7 +35,20 @@ class OrderServiceTest {
     private final GoodsRepository goodsRepository = org.mockito.Mockito.mock(GoodsRepository.class);
     private final ConversationService conversationService = org.mockito.Mockito.mock(ConversationService.class);
     private final NotificationService notificationService = org.mockito.Mockito.mock(NotificationService.class);
-    private final OrderService service = new OrderService(orderRepository, goodsRepository, conversationService, notificationService);
+    private final PaymentProvider paymentProvider = org.mockito.Mockito.mock(PaymentProvider.class);
+    private final FileService fileService = org.mockito.Mockito.mock(FileService.class);
+    private final FileRepository fileRepository = org.mockito.Mockito.mock(FileRepository.class);
+    private final AuditLogRepository auditLogRepository = org.mockito.Mockito.mock(AuditLogRepository.class);
+    private final OrderService service = new OrderService(
+            orderRepository,
+            goodsRepository,
+            conversationService,
+            notificationService,
+            paymentProvider,
+            fileService,
+            fileRepository,
+            auditLogRepository
+    );
 
     @Test
     void createOrderReservesGoodsAndNotifiesSeller() {
@@ -82,6 +98,19 @@ class OrderServiceTest {
         when(orderRepository.findOrderByIdForUpdate(500L)).thenReturn(Optional.of(order));
         when(goodsRepository.currentOccupiedOrderId(100L)).thenReturn(500L);
         when(orderRepository.findLatestPaymentByOrderForUpdate(500L)).thenReturn(Optional.of(pendingPayment));
+        when(paymentProvider.simulateSuccessfulPayment(pendingPayment)).thenReturn(new PaymentProviderCallback(
+                "SIMULATED",
+                "SIM-CB-PAY-1",
+                "SIM-TXN-PAY-1",
+                900L,
+                new BigDecimal("399.00"),
+                "SUCCEEDED",
+                Instant.parse("2026-06-01T01:00:00Z"),
+                "{\"source\":\"test\"}"
+        ));
+        when(orderRepository.findPaymentByIdForUpdate(900L)).thenReturn(Optional.of(pendingPayment));
+        when(orderRepository.insertPaymentCallbackIfAbsent(eq(900L), eq("SIMULATED"), eq("SIM-CB-PAY-1"), any(), eq("SUCCEEDED"), any()))
+                .thenReturn(1);
         when(orderRepository.updateOrderStatus(eq(500L), eq(TradeOrderStatus.PENDING_PAYMENT), eq(TradeOrderStatus.PAID_PENDING_MEETUP), any(), eq(false)))
                 .thenReturn(1);
         when(orderRepository.findLatestPaymentByOrder(500L)).thenReturn(Optional.of(escrowedPayment));

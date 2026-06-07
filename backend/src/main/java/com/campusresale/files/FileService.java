@@ -106,7 +106,13 @@ public class FileService {
 
         CurrentPrincipal currentPrincipal = principal.orElse(null);
         if (record.visibilityScope() == VisibilityScope.PRIVATE) {
-            if (currentPrincipal != null && (isOwner(record, currentPrincipal) || isAdmin(currentPrincipal))) {
+            if (currentPrincipal != null && isOwner(record, currentPrincipal)) {
+                return originalContent(record);
+            }
+            if (currentPrincipal != null && isAdmin(currentPrincipal)) {
+                if (record.fileKind() == FileKind.ORDER_EVIDENCE && "REFUND".equals(record.businessType())) {
+                    return originalSensitiveContent(record, currentPrincipal, "REFUND_EVIDENCE", reason, ipAddress);
+                }
                 return originalContent(record);
             }
             throw ApiExceptions.notFound("文件不存在或不可见");
@@ -155,6 +161,17 @@ public class FileService {
         return record;
     }
 
+    public StoredFileRecord requireOwnedOrderEvidence(long fileId, long ownerUserId) {
+        StoredFileRecord record = fileRepository.findById(fileId)
+                .orElseThrow(() -> ApiExceptions.validation("退款证据文件不存在", Map.of("field", "evidenceFileIds")));
+        if (!Long.valueOf(ownerUserId).equals(record.ownerUserId())
+                || record.fileKind() != FileKind.ORDER_EVIDENCE
+                || record.visibilityScope() != VisibilityScope.PRIVATE) {
+            throw ApiExceptions.validation("退款证据必须由当前用户上传并且用途为 ORDER_EVIDENCE", Map.of("field", "evidenceFileIds"));
+        }
+        return record;
+    }
+
     private void requireMetadataAccess(StoredFileRecord record, Optional<CurrentPrincipal> principal) {
         if (record.visibilityScope() == VisibilityScope.PUBLIC) {
             return;
@@ -181,7 +198,11 @@ public class FileService {
             String reason,
             String ipAddress
     ) {
-        String defaultReason = "PRIVATE_MESSAGE_IMAGE".equals(targetType) ? "查看私信图片" : "审核认证材料";
+        String defaultReason = switch (targetType) {
+            case "PRIVATE_MESSAGE_IMAGE" -> "查看私信图片";
+            case "REFUND_EVIDENCE" -> "查看退款证据";
+            default -> "审核认证材料";
+        };
         String accessReason = reason == null || reason.isBlank() ? defaultReason : reason.trim();
         try {
             FileContentResponse response = originalContent(record);
