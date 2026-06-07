@@ -5,7 +5,10 @@ import type {
   OrderSummary,
   PageResponse,
   PaymentSummary,
-  ReviewSummary
+  PaymentTransactionSummary,
+  RefundSummary,
+  ReviewSummary,
+  SettlementSummary
 } from "./types";
 
 export function createOrder(request: CreateOrderRequest) {
@@ -47,6 +50,25 @@ export function simulatePayment(id: number) {
 
 export function getPaymentStatus(id: number) {
   return apiRequest<PaymentSummary>(`/api/orders/${id}/payment`);
+}
+
+export function getPaymentTransactions(id: number) {
+  return apiRequest<PaymentTransactionSummary[]>(`/api/orders/${id}/payment/transactions`);
+}
+
+export function getSettlementStatus(id: number) {
+  return apiRequest<SettlementSummary>(`/api/orders/${id}/settlement`);
+}
+
+export function getOrderRefunds(id: number) {
+  return apiRequest<RefundSummary[]>(`/api/orders/${id}/refunds`);
+}
+
+export function createRefund(id: number, request: { refundType: string; amount: string; reason: string; evidenceFileIds: number[] }) {
+  return apiRequest<RefundSummary>(`/api/orders/${id}/refunds`, {
+    method: "POST",
+    body: JSON.stringify(request)
+  });
 }
 
 export function requestCompletion(id: number) {

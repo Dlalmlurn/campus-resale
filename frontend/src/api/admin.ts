@@ -3,7 +3,7 @@
  * 全部复用 apiRequest / queryString，不引入 axios 或其他额外依赖。
  */
 import { apiRequest, queryString } from "./client";
-import type { PageResponse } from "./types";
+import type { PageResponse, PaymentSummary, RefundSummary, SettlementSummary } from "./types";
 
 // ─────────────────────────────────────────────
 // 类型定义
@@ -199,4 +199,31 @@ export function getSensitiveAccessLogs(filter: SensitiveAccessLogFilter = {}): P
     pageSize: filter.pageSize ?? 20
   });
   return apiRequest<PageResponse<SensitiveAccessLogItem>>(`/api/admin/sensitive-access-logs${qs}`);
+}
+
+export function getAdminPayments(page = 1, pageSize = 20): Promise<PageResponse<PaymentSummary>> {
+  return apiRequest<PageResponse<PaymentSummary>>(`/api/admin/payments${queryString({ page, pageSize })}`);
+}
+
+export function getAdminRefunds(page = 1, pageSize = 20): Promise<PageResponse<RefundSummary>> {
+  return apiRequest<PageResponse<RefundSummary>>(`/api/admin/refunds${queryString({ page, pageSize })}`);
+}
+
+export function decideAdminRefund(id: number, decision: string, decisionNote: string): Promise<RefundSummary> {
+  return apiRequest<RefundSummary>(`/api/admin/refunds/${id}/decide`, {
+    method: "POST",
+    body: JSON.stringify({ decision, decisionNote })
+  });
+}
+
+export function getAdminSettlements(page = 1, pageSize = 20): Promise<PageResponse<SettlementSummary>> {
+  return apiRequest<PageResponse<SettlementSummary>>(`/api/admin/settlements${queryString({ page, pageSize })}`);
+}
+
+export function advanceSettlement(id: number): Promise<SettlementSummary> {
+  return apiRequest<SettlementSummary>(`/api/admin/settlements/${id}/advance`, { method: "POST" });
+}
+
+export function advanceDueSettlements(): Promise<SettlementSummary[]> {
+  return apiRequest<SettlementSummary[]>("/api/admin/settlements/advance-due", { method: "POST" });
 }

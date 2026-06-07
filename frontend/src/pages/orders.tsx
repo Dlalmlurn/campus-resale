@@ -1,24 +1,33 @@
-import { CreditCard, MessageSquareText, PackageCheck, RefreshCw, Star, XCircle } from "lucide-react";
+import { CreditCard, FileUp, MessageSquareText, PackageCheck, RefreshCw, Star, XCircle } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   buyerCancelOrder,
   confirmCompletion,
+  createRefund,
   createReview,
   getOrderDetail,
+  getOrderRefunds,
   getOrderReviews,
   getOrders,
   getPaymentStatus,
+  getPaymentTransactions,
+  getSettlementStatus,
   requestCompletion,
   sellerConfirmOrder,
   sellerRejectOrder,
   simulatePayment
 } from "../api/orders";
+import { uploadFile } from "../api/m1";
 import type {
   CompletionRequestSummary,
   CurrentUser,
   OrderSummary,
   PaymentSummary,
-  ReviewSummary
+  PaymentTransactionSummary,
+  RefundSummary,
+  ReviewSummary,
+  SettlementSummary,
+  StoredFileSummary
 } from "../api/types";
 
 type Notify = (tone: "success" | "error", text: string) => void;
@@ -120,6 +129,9 @@ export function OrderDetailPage(props: {
 }) {
   const [order, setOrder] = useState<OrderSummary | null>(null);
   const [payment, setPayment] = useState<PaymentSummary | null>(null);
+  const [transactions, setTransactions] = useState<PaymentTransactionSummary[]>([]);
+  const [refunds, setRefunds] = useState<RefundSummary[]>([]);
+  const [settlement, setSettlement] = useState<SettlementSummary | null>(null);
   const [completion, setCompletion] = useState<CompletionRequestSummary | null>(null);
   const [reviews, setReviews] = useState<ReviewSummary[]>([]);
   const [busy, setBusy] = useState(false);
@@ -132,6 +144,11 @@ export function OrderDetailPage(props: {
       void getOrderReviews(props.id).then(setReviews).catch(() => setReviews([]));
       if (["PENDING_PAYMENT", "PAID_PENDING_MEETUP", "COMPLETED_PENDING_SETTLEMENT", "COMPLETED"].includes(next.status)) {
         void getPaymentStatus(props.id).then(setPayment).catch(() => setPayment(null));
+        void getPaymentTransactions(props.id).then(setTransactions).catch(() => setTransactions([]));
+      }
+      void getOrderRefunds(props.id).then(setRefunds).catch(() => setRefunds([]));
+      if (["COMPLETED_PENDING_SETTLEMENT", "COMPLETED"].includes(next.status)) {
+        void getSettlementStatus(props.id).then(setSettlement).catch(() => setSettlement(null));
       }
     } catch (error) {
       props.notify("error", messageOf(error));
@@ -140,7 +157,7 @@ export function OrderDetailPage(props: {
 
   useEffect(() => { void load(); }, [load]);
 
-  const action = async (runner: () => Promise<OrderSummary | CompletionRequestSummary | PaymentSummary | ReviewSummary>, success: string) => {
+  const action = async (runner: () => Promise<OrderSummary | CompletionRequestSummary | PaymentSummary | ReviewSummary | RefundSummary>, success: string) => {
     setBusy(true);
     try {
       const result = await runner();
@@ -156,6 +173,10 @@ export function OrderDetailPage(props: {
         setCompletion(null);
       }
       if ("rating" in result) setReviews((current) => [result, ...current]);
+      if ("refundNo" in result) {
+        setRefunds((current) => [result, ...current]);
+        await load();
+      }
       props.notify("success", success);
     } catch (error) {
       props.notify("error", messageOf(error));
@@ -169,6 +190,7 @@ export function OrderDetailPage(props: {
   const isBuyer = order.buyer.id === props.currentUser.id;
   const isSeller = order.seller.id === props.currentUser.id;
   const canReview = isBuyer && ["COMPLETED_PENDING_SETTLEMENT", "COMPLETED"].includes(order.status) && reviews.length === 0;
+  const canRefund = ["PAID_PENDING_MEETUP", "COMPLETED_PENDING_SETTLEMENT"].includes(order.status) && (isBuyer || isSeller);
 
   return (
     <section className="order-detail">
@@ -197,8 +219,10 @@ export function OrderDetailPage(props: {
             <div><dt>见面时间</dt><dd>{formatDate(order.meetupTime)}</dd></div>
             <div><dt>备注</dt><dd>{order.buyerNote || "无"}</dd></div>
             {payment && <div><dt>支付状态</dt><dd>{paymentStatusLabel(payment.status)}</dd></div>}
+            {settlement && <div><dt>结算状态</dt><dd>{settlementStatusLabel(settlement.status)} · ¥{settlement.settlementAmount}</dd></div>}
             {order.closedAt && <div><dt>关闭时间</dt><dd>{formatDate(order.closedAt)}</dd></div>}
           </dl>
+          <MoneyTrail payment={payment} transactions={transactions} settlement={settlement} refunds={refunds} />
         </article>
         <aside className="side-panel action-panel">
           <div className="panel-title"><h2>下一步操作</h2></div>
@@ -216,6 +240,14 @@ export function OrderDetailPage(props: {
             onRequestCompletion={() => action(() => requestCompletion(order.id), "已发起完成确认")}
             onConfirmCompletion={() => action(() => confirmCompletion(order.id, completion!.id), "交易完成确认成功")}
           />
+          {canRefund && (
+            <RefundForm
+              busy={busy}
+              maxAmount={payment?.amount ?? order.frozenAmount}
+              onSubmit={(request) => action(() => createRefund(order.id, request), "退款申请已提交")}
+              notify={props.notify}
+            />
+          )}
           {canReview && <ReviewForm busy={busy} onSubmit={(rating, content) => action(() => createReview(order.id, rating, content), "评价已提交")} />}
           {reviews.length > 0 && <div className="review-summary"><Star size={17} /><span>已评价：{reviews[0].rating} 星 · {reviews[0].content}</span></div>}
         </aside>
@@ -253,6 +285,110 @@ function OrderActions(props: {
     return <div className="closed-hint"><XCircle size={18} /> 当前订单无需继续操作。</div>;
   }
   return <div className="closed-hint"><MessageSquareText size={18} /> 等待对方完成下一步。</div>;
+}
+
+function MoneyTrail(props: {
+  payment: PaymentSummary | null;
+  transactions: PaymentTransactionSummary[];
+  settlement: SettlementSummary | null;
+  refunds: RefundSummary[];
+}) {
+  return (
+    <section className="money-trail">
+      <div className="panel-title"><h2>资金链路</h2></div>
+      <div className="money-grid">
+        <MoneyItem label="支付单" value={props.payment ? paymentStatusLabel(props.payment.status) : "暂无"} sub={props.payment ? `${props.payment.paymentNo} · ¥${props.payment.amount}` : "卖家确认后生成"} />
+        <MoneyItem label="支付流水" value={`${props.transactions.length} 条`} sub={props.transactions[0]?.transactionNo ?? "等待支付回调"} />
+        <MoneyItem label="退款" value={`${props.refunds.length} 笔`} sub={props.refunds[0] ? `${refundStatusLabel(props.refunds[0].status)} · ¥${props.refunds[0].amount}` : "暂无退款申请"} />
+        <MoneyItem label="结算" value={props.settlement ? settlementStatusLabel(props.settlement.status) : "暂无"} sub={props.settlement ? `${props.settlement.settlementNo} · ¥${props.settlement.settlementAmount}` : "完成确认后生成"} />
+      </div>
+      {props.refunds.length > 0 && (
+        <div className="refund-list">
+          {props.refunds.map((refund) => (
+            <div className="refund-row" key={refund.id}>
+              <span>{refund.refundNo}</span>
+              <strong>¥{refund.amount}</strong>
+              <em>{refundStatusLabel(refund.status)}</em>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function MoneyItem(props: { label: string; value: string; sub: string }) {
+  return <div className="money-item"><span>{props.label}</span><strong>{props.value}</strong><small>{props.sub}</small></div>;
+}
+
+function RefundForm(props: {
+  busy: boolean;
+  maxAmount: string;
+  onSubmit: (request: { refundType: string; amount: string; reason: string; evidenceFileIds: number[] }) => void;
+  notify: Notify;
+}) {
+  const [open, setOpen] = useState(false);
+  const [refundType, setRefundType] = useState("FULL");
+  const [amount, setAmount] = useState(props.maxAmount);
+  const [reason, setReason] = useState("");
+  const [files, setFiles] = useState<StoredFileSummary[]>([]);
+  const [uploading, setUploading] = useState(false);
+
+  useEffect(() => setAmount(props.maxAmount), [props.maxAmount]);
+
+  const upload = async (file?: File) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const uploaded = await uploadFile(file, "ORDER_EVIDENCE");
+      setFiles((current) => [...current, uploaded]);
+      props.notify("success", "退款证据已上传");
+    } catch (error) {
+      props.notify("error", messageOf(error));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    props.onSubmit({
+      refundType,
+      amount,
+      reason: reason || "交易协商退款",
+      evidenceFileIds: files.map((file) => file.id)
+    });
+  };
+
+  if (!open) {
+    return <button className="secondary-button full-width" disabled={props.busy} type="button" onClick={() => setOpen(true)}>申请退款</button>;
+  }
+
+  return (
+    <form className="refund-form" onSubmit={submit}>
+      <div className="panel-title"><h2>退款申请</h2></div>
+      <div className="segmented-control">
+        <button className={refundType === "FULL" ? "active" : ""} type="button" onClick={() => { setRefundType("FULL"); setAmount(props.maxAmount); }}>全额</button>
+        <button className={refundType === "PARTIAL" ? "active" : ""} type="button" onClick={() => setRefundType("PARTIAL")}>部分</button>
+      </div>
+      <FormField label="退款金额">
+        <input value={amount} onChange={(event) => setAmount(event.target.value)} inputMode="decimal" />
+      </FormField>
+      <FormField label="退款原因">
+        <textarea rows={3} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="描述退款原因和协商情况" />
+      </FormField>
+      <label className="upload-zone compact-zone">
+        <FileUp size={18} />
+        <span>{uploading ? "上传中..." : "上传退款证据"}</span>
+        <input type="file" accept="image/png,image/jpeg,image/webp" disabled={uploading || props.busy} onChange={(event) => void upload(event.target.files?.[0])} />
+      </label>
+      {files.map((file) => <div className="file-row" key={file.id}><FileUp size={15} /><span>{file.originalName}</span><small>#{file.id}</small></div>)}
+      <div className="button-row">
+        <button className="primary-button" disabled={props.busy || uploading} type="submit">提交退款</button>
+        <button className="secondary-button" disabled={props.busy} type="button" onClick={() => setOpen(false)}>收起</button>
+      </div>
+    </form>
+  );
 }
 
 function ReviewForm(props: { busy: boolean; onSubmit: (rating: number, content: string) => void }) {
@@ -310,6 +446,14 @@ function StateBlock({ title }: { title: string }) {
 
 function paymentStatusLabel(status: string) {
   return ({ PENDING: "待支付", PROCESSING: "处理中", ESCROWED: "已托管", FAILED: "支付失败", CLOSED: "已关闭" } as Record<string, string>)[status] ?? status;
+}
+
+function settlementStatusLabel(status: string) {
+  return ({ PENDING: "待结算", PROCESSING: "结算处理中", SETTLED: "已结算", FAILED: "结算失败", CLOSED: "已关闭" } as Record<string, string>)[status] ?? status;
+}
+
+function refundStatusLabel(status: string) {
+  return ({ PENDING: "待审核", PROCESSING: "退款处理中", REFUNDED: "已退款", FAILED: "退款失败", CLOSED: "已关闭" } as Record<string, string>)[status] ?? status;
 }
 
 function readStoredCompletion(orderId: number) {

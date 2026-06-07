@@ -142,9 +142,9 @@ h2 { letter-spacing: 0; }
 .badge.neutral { color: #506071; background: #edf1f3; }
 
 .admin-tabs { width: min(430px, 100%); margin-bottom: 14px; }
-.admin-tabs--wide { width: min(680px, 100%); grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.admin-tabs--wide { width: min(820px, 100%); grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .admin-tabs button, .order-tabs button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
-.admin-demo-guide { display: grid; grid-template-columns: minmax(180px, 1fr) repeat(5, auto); gap: 10px; align-items: center; margin-bottom: 16px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.admin-demo-guide { display: grid; grid-template-columns: minmax(180px, 1fr) repeat(6, auto); gap: 10px; align-items: center; margin-bottom: 16px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
 .admin-demo-guide h2 { margin: 0; font-size: 1rem; }
 .admin-demo-guide .eyebrow { margin-bottom: 2px; }
 .dashboard-page { display: grid; gap: 14px; }
@@ -218,6 +218,18 @@ h2 { letter-spacing: 0; }
 .order-step strong { display: block; margin-bottom: 4px; color: var(--ink); font-size: 0.86rem; }
 .order-step.done { border-color: #b8d9cd; color: var(--green-dark); background: var(--green-soft); }
 .order-step.current { border-color: #9fc5e6; color: var(--blue); background: var(--blue-soft); box-shadow: 0 8px 20px #2267a814; }
+.money-trail { display: grid; gap: 10px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.money-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.money-item { display: grid; gap: 4px; min-height: 82px; padding: 10px; border: 1px solid #dfe6e2; border-radius: 8px; background: #fbfcfb; }
+.money-item span, .money-item small { color: var(--muted); font-size: 0.76rem; }
+.money-item strong { color: var(--ink); font-size: 0.92rem; }
+.refund-list { display: grid; gap: 6px; }
+.refund-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid #e8eeeb; border-radius: 8px; font-size: 0.82rem; }
+.refund-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.refund-row em { color: var(--green-dark); font-style: normal; font-weight: 800; }
+.refund-form { display: grid; gap: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.table-actions { display: flex; gap: 6px; }
+.funds-page { display: grid; gap: 12px; }
 .action-panel { display: grid; gap: 12px; }
 .action-panel p { margin: 0; color: var(--muted); line-height: 1.65; }
 .closed-hint, .review-summary { display: flex; align-items: center; gap: 8px; padding: 11px; border: 1px solid #dfe6e2; border-radius: 8px; color: var(--muted); background: #f8fafb; font-size: 0.86rem; }
