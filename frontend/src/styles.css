@@ -226,6 +226,7 @@ h2 { letter-spacing: 0; }
 .conversation-list { display: grid; gap: 10px; }
 .conversation-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; align-items: center; width: 100%; padding: 15px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: #fff; text-align: left; }
 .conversation-row:hover { border-color: #a9c7bc; box-shadow: 0 8px 20px #2f524614; }
+.conversation-row.unread { border-color: #e9c873; background: #fffdf6; }
 .conversation-thumb { display: grid; width: 48px; height: 48px; place-items: center; border-radius: 8px; color: var(--green-dark); background: var(--green-soft); }
 .conversation-row h2 { margin: 4px 0 5px; font-size: 1rem; }
 .conversation-row p { margin: 0; color: var(--muted); font-size: 0.84rem; }
@@ -238,15 +239,22 @@ h2 { letter-spacing: 0; }
 .message-bubble.mine { justify-self: end; border-color: #b8d9cd; background: #f1faf6; }
 .message-bubble small { color: var(--muted); font-size: 0.75rem; }
 .message-bubble p { margin: 0; color: var(--ink); line-height: 1.55; overflow-wrap: anywhere; }
-.message-compose { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
+.message-attachments { display: grid; grid-template-columns: repeat(2, minmax(120px, 220px)); gap: 8px; }
+.message-attachments img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border: 1px solid #dfe6e2; border-radius: 8px; background: #edf3f0; }
+.message-compose { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; }
 .message-compose input { min-width: 0; padding: 9px 10px; border: 1px solid #dbe3df; border-radius: 8px; outline: 0; background: #fbfcfb; }
+.image-button input { display: none; }
 .conversation-side { display: grid; gap: 14px; }
 .conversation-side select, .conversation-side input { min-width: 0; width: 100%; padding: 9px 10px; border: 1px solid #dbe3df; border-radius: 8px; outline: 0; background: #fbfcfb; }
+.conversation-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .conversation-card-list { display: grid; gap: 10px; padding-top: 12px; border-top: 1px solid var(--line); }
 .bargain-card { display: grid; gap: 7px; padding: 11px; border: 1px solid #ead49b; border-radius: 8px; background: #fffaf0; }
+.bargain-card.expired { border-color: #dfe6e2; background: #f7f8f7; }
 .bargain-card > div:first-child { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .bargain-card strong { color: #c04e2b; font-size: 1.2rem; }
 .bargain-card p, .bargain-card small { margin: 0; color: var(--muted); line-height: 1.5; }
+.danger-action { border-color: #e4b5ae; color: var(--red); background: var(--red-soft); }
+.error-text { color: var(--red); }
 .admin-tabs b { margin-left: 5px; }
 .review-list { display: grid; gap: 8px; }
 .review-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 16px; padding: 15px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
@@ -289,7 +297,7 @@ h2 { letter-spacing: 0; }
   .app-header { grid-template-columns: 1fr auto; gap: 12px; }
   .main-nav { grid-column: 1 / -1; grid-row: 2; overflow-x: auto; padding-bottom: 8px; }
   .goods-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .detail-grid, .auth-layout, .two-column-layout, .seller-layout, .order-detail-grid { grid-template-columns: 1fr; }
+  .detail-grid, .auth-layout, .two-column-layout, .seller-layout, .order-detail-grid, .conversation-detail-grid { grid-template-columns: 1fr; }
   .admin-demo-guide, .log-filter-bar, .stat-grid { grid-template-columns: 1fr 1fr; }
   .order-timeline { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .auth-layout { min-height: 0; padding-top: 44px; }
@@ -315,6 +323,9 @@ h2 { letter-spacing: 0; }
   .order-card { grid-template-columns: 1fr; }
   .order-timeline { grid-template-columns: 1fr; }
   .governance-metrics, .governance-board { grid-template-columns: 1fr; }
+  .message-compose { grid-template-columns: auto minmax(0, 1fr); }
+  .message-compose button[type="submit"] { grid-column: 1 / -1; }
+  .message-attachments { grid-template-columns: 1fr; }
   .review-meta { grid-column: 1; grid-row: 2; }
   .review-actions { grid-column: 2; grid-row: 1 / span 2; }
 }

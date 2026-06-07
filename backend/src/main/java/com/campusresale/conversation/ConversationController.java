@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -48,6 +49,16 @@ public class ConversationController {
         return conversationService.detail(id, principal(servletRequest));
     }
 
+    @RequireLogin
+    @GetMapping("/{id}/messages")
+    public List<MessageResponse> messagesAfter(
+            @PathVariable long id,
+            @RequestParam(defaultValue = "0") long afterId,
+            HttpServletRequest servletRequest
+    ) {
+        return conversationService.messagesAfter(id, afterId, principal(servletRequest));
+    }
+
     @RequireTradeEligible
     @PostMapping("/{id}/messages")
     public MessageResponse sendMessage(
@@ -56,6 +67,16 @@ public class ConversationController {
             HttpServletRequest servletRequest
     ) {
         return conversationService.sendText(id, request, principal(servletRequest));
+    }
+
+    @RequireTradeEligible
+    @PostMapping("/{id}/image-messages")
+    public MessageResponse sendImageMessage(
+            @PathVariable long id,
+            @RequestBody SendMessageRequest request,
+            HttpServletRequest servletRequest
+    ) {
+        return conversationService.sendImage(id, request, principal(servletRequest));
     }
 
     @RequireTradeEligible
@@ -86,6 +107,24 @@ public class ConversationController {
             HttpServletRequest servletRequest
     ) {
         return conversationService.rejectBargain(id, cardId, principal(servletRequest));
+    }
+
+    @RequireLogin
+    @PostMapping("/{id}/archive")
+    public ConversationSummary archive(@PathVariable long id, HttpServletRequest servletRequest) {
+        return conversationService.archive(id, principal(servletRequest));
+    }
+
+    @RequireLogin
+    @PostMapping("/{id}/unarchive")
+    public ConversationSummary unarchive(@PathVariable long id, HttpServletRequest servletRequest) {
+        return conversationService.unarchive(id, principal(servletRequest));
+    }
+
+    @RequireLogin
+    @PostMapping("/{id}/block")
+    public ConversationSummary block(@PathVariable long id, HttpServletRequest servletRequest) {
+        return conversationService.block(id, principal(servletRequest));
     }
 
     private CurrentPrincipal principal(HttpServletRequest request) {

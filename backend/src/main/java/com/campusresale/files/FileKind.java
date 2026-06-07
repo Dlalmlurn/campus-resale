@@ -10,7 +10,8 @@ public enum FileKind {
     CAMPUS_AUTH_MATERIAL,
     ORDER_EVIDENCE,
     REPORT_EVIDENCE,
-    APPEAL_EVIDENCE;
+    APPEAL_EVIDENCE,
+    MESSAGE_IMAGE;
 
     public static FileKind parse(String value) {
         return Arrays.stream(values())

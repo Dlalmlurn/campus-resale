@@ -51,6 +51,10 @@ public class NotificationService {
         return new MarkAllReadResponse(updated);
     }
 
+    public void markConversationRead(long receiverUserId, long conversationId) {
+        notificationRepository.markRelatedRead(receiverUserId, "CONVERSATION", conversationId, java.time.Instant.now());
+    }
+
     @Transactional
     public NotificationRecord create(
             long receiverUserId,

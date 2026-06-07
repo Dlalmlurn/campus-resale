@@ -5,10 +5,13 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -27,6 +30,54 @@ public class ConversationRepository {
                    c.last_message_id,
                    lm.text_content AS last_message_text,
                    c.last_message_at,
+                   0::bigint AS unread_count,
+                   NULL::timestamptz AS archived_at,
+                   c.created_at,
+                   c.updated_at
+            FROM conversations c
+            JOIN goods g ON g.id = c.goods_id
+            JOIN users buyer ON buyer.id = c.buyer_id
+            JOIN users seller ON seller.id = c.seller_id
+            LEFT JOIN messages lm ON lm.id = c.last_message_id
+            LEFT JOIN LATERAL (
+                SELECT gi.file_id
+                FROM goods_images gi
+                WHERE gi.goods_id = c.goods_id
+                ORDER BY gi.is_primary DESC, gi.sort_order, gi.id
+                LIMIT 1
+            ) pi ON TRUE
+            """;
+
+    private static final String CONVERSATION_SELECT_FOR_VIEWER = """
+            SELECT c.id,
+                   c.goods_id,
+                   g.title AS goods_title,
+                   pi.file_id AS primary_image_file_id,
+                   c.buyer_id,
+                   buyer.nickname AS buyer_nickname,
+                   c.seller_id,
+                   seller.nickname AS seller_nickname,
+                   c.status,
+                   c.last_message_id,
+                   lm.text_content AS last_message_text,
+                   c.last_message_at,
+                   (
+                       SELECT COUNT(*)
+                       FROM messages unread_messages
+                       WHERE unread_messages.conversation_id = c.id
+                         AND unread_messages.sender_id IS DISTINCT FROM ?
+                         AND NOT EXISTS (
+                             SELECT 1
+                             FROM message_read_states mrs
+                             WHERE mrs.message_id = unread_messages.id
+                               AND mrs.user_id = ?
+                         )
+                   ) AS unread_count,
+                   CASE
+                       WHEN c.buyer_id = ? THEN c.buyer_archived_at
+                       WHEN c.seller_id = ? THEN c.seller_archived_at
+                       ELSE NULL
+                   END AS archived_at,
                    c.created_at,
                    c.updated_at
             FROM conversations c
@@ -73,9 +124,11 @@ public class ConversationRepository {
             """;
 
     private final JdbcTemplate jdbcTemplate;
+    private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
 
-    public ConversationRepository(JdbcTemplate jdbcTemplate) {
+    public ConversationRepository(JdbcTemplate jdbcTemplate, NamedParameterJdbcTemplate namedParameterJdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
+        this.namedParameterJdbcTemplate = namedParameterJdbcTemplate;
     }
 
     public long createOrGet(long goodsId, long buyerId, long sellerId, Instant now) {
@@ -110,6 +163,17 @@ public class ConversationRepository {
         ).stream().findFirst();
     }
 
+    public Optional<ConversationRecord> findByIdForViewer(long conversationId, long viewerId) {
+        return jdbcTemplate.query(CONVERSATION_SELECT_FOR_VIEWER + " WHERE c.id = ?",
+                new ConversationRowMapper(),
+                viewerId,
+                viewerId,
+                viewerId,
+                viewerId,
+                conversationId
+        ).stream().findFirst();
+    }
+
     public Optional<ConversationRecord> findByIdForUpdate(long conversationId) {
         return jdbcTemplate.query(CONVERSATION_SELECT + " WHERE c.id = ? FOR UPDATE OF c",
                 new ConversationRowMapper(),
@@ -118,11 +182,16 @@ public class ConversationRepository {
     }
 
     public List<ConversationRecord> listByParticipant(long userId) {
-        return jdbcTemplate.query(CONVERSATION_SELECT + """
-                        WHERE c.buyer_id = ? OR c.seller_id = ?
+        return jdbcTemplate.query(CONVERSATION_SELECT_FOR_VIEWER + """
+                        WHERE (c.buyer_id = ? AND c.buyer_archived_at IS NULL)
+                           OR (c.seller_id = ? AND c.seller_archived_at IS NULL)
                         ORDER BY COALESCE(c.last_message_at, c.created_at) DESC, c.id DESC
                         """,
                 new ConversationRowMapper(),
+                userId,
+                userId,
+                userId,
+                userId,
                 userId,
                 userId
         );
@@ -139,6 +208,29 @@ public class ConversationRepository {
                             sent_at
                         )
                         VALUES (?, ?, 'TEXT', 'SENT', ?, ?)
+                        RETURNING id
+                        """,
+                Long.class,
+                conversationId,
+                senderId,
+                textContent,
+                Timestamp.from(now)
+        );
+        updateLastMessage(conversationId, id == null ? 0 : id, now);
+        return id == null ? 0 : id;
+    }
+
+    public long createImageMessage(long conversationId, long senderId, String textContent, Instant now) {
+        Long id = jdbcTemplate.queryForObject("""
+                        INSERT INTO messages (
+                            conversation_id,
+                            sender_id,
+                            message_type,
+                            status,
+                            text_content,
+                            sent_at
+                        )
+                        VALUES (?, ?, 'IMAGE', 'SENT', ?, ?)
                         RETURNING id
                         """,
                 Long.class,
@@ -230,6 +322,12 @@ public class ConversationRepository {
         updateLastMessage(conversationId, messageId, now);
     }
 
+    public long createBargainDecisionMessageReturningId(long conversationId, long cardId, String text, Instant now) {
+        long messageId = createSystemCardMessage(conversationId, cardId, text, now);
+        updateLastMessage(conversationId, messageId, now);
+        return messageId;
+    }
+
     public List<MessageRecord> listMessages(long conversationId) {
         return jdbcTemplate.query(MESSAGE_SELECT + """
                         WHERE m.conversation_id = ?
@@ -240,11 +338,161 @@ public class ConversationRepository {
         );
     }
 
+    public List<MessageRecord> listMessagesAfterId(long conversationId, long afterId) {
+        return jdbcTemplate.query(MESSAGE_SELECT + """
+                        WHERE m.conversation_id = ?
+                          AND m.id > ?
+                        ORDER BY m.sent_at ASC, m.id ASC
+                        """,
+                new MessageRowMapper(),
+                conversationId,
+                afterId
+        );
+    }
+
     public Optional<MessageRecord> findMessageById(long messageId) {
         return jdbcTemplate.query(MESSAGE_SELECT + " WHERE m.id = ?",
                 new MessageRowMapper(),
                 messageId
         ).stream().findFirst();
+    }
+
+    public Optional<MessageRecord> findMessageByCardId(long cardId) {
+        return jdbcTemplate.query(MESSAGE_SELECT + """
+                        WHERE m.card_id = ?
+                        ORDER BY m.id DESC
+                        LIMIT 1
+                        """,
+                new MessageRowMapper(),
+                cardId
+        ).stream().findFirst();
+    }
+
+    public void createMessageAttachments(long messageId, List<Long> fileIds) {
+        if (fileIds == null || fileIds.isEmpty()) {
+            return;
+        }
+        for (int index = 0; index < fileIds.size(); index++) {
+            jdbcTemplate.update("""
+                            INSERT INTO message_attachments (message_id, file_id, sort_order, created_at)
+                            VALUES (?, ?, ?, ?)
+                            """,
+                    messageId,
+                    fileIds.get(index),
+                    index,
+                    Timestamp.from(Instant.now())
+            );
+        }
+    }
+
+    public List<MessageAttachmentRecord> listAttachmentsByMessageIds(Collection<Long> messageIds) {
+        if (messageIds == null || messageIds.isEmpty()) {
+            return List.of();
+        }
+        return namedParameterJdbcTemplate.query("""
+                        SELECT ma.id,
+                               ma.message_id,
+                               ma.file_id,
+                               sf.original_name,
+                               sf.content_type,
+                               sf.byte_size,
+                               ma.sort_order
+                        FROM message_attachments ma
+                        JOIN stored_files sf ON sf.id = ma.file_id
+                        WHERE ma.message_id IN (:messageIds)
+                          AND sf.deleted_at IS NULL
+                        ORDER BY ma.message_id, ma.sort_order, ma.id
+                        """,
+                Map.of("messageIds", messageIds),
+                new MessageAttachmentRowMapper()
+        );
+    }
+
+    public int markMessagesRead(long conversationId, long userId, Instant readAt) {
+        return jdbcTemplate.update("""
+                        INSERT INTO message_read_states (message_id, user_id, read_at)
+                        SELECT m.id, ?, ?
+                        FROM messages m
+                        WHERE m.conversation_id = ?
+                          AND m.sender_id IS DISTINCT FROM ?
+                        ON CONFLICT (message_id, user_id) DO NOTHING
+                        """,
+                userId,
+                Timestamp.from(readAt),
+                conversationId,
+                userId
+        );
+    }
+
+    public int archive(long conversationId, long userId, Instant archivedAt) {
+        return jdbcTemplate.update("""
+                        UPDATE conversations
+                        SET buyer_archived_at = CASE WHEN buyer_id = ? THEN ? ELSE buyer_archived_at END,
+                            seller_archived_at = CASE WHEN seller_id = ? THEN ? ELSE seller_archived_at END,
+                            updated_at = ?
+                        WHERE id = ?
+                          AND (buyer_id = ? OR seller_id = ?)
+                        """,
+                userId,
+                Timestamp.from(archivedAt),
+                userId,
+                Timestamp.from(archivedAt),
+                Timestamp.from(archivedAt),
+                conversationId,
+                userId,
+                userId
+        );
+    }
+
+    public int unarchive(long conversationId, long userId, Instant updatedAt) {
+        return jdbcTemplate.update("""
+                        UPDATE conversations
+                        SET buyer_archived_at = CASE WHEN buyer_id = ? THEN NULL ELSE buyer_archived_at END,
+                            seller_archived_at = CASE WHEN seller_id = ? THEN NULL ELSE seller_archived_at END,
+                            updated_at = ?
+                        WHERE id = ?
+                          AND (buyer_id = ? OR seller_id = ?)
+                        """,
+                userId,
+                userId,
+                Timestamp.from(updatedAt),
+                conversationId,
+                userId,
+                userId
+        );
+    }
+
+    public int block(long conversationId, long userId, Instant blockedAt) {
+        return jdbcTemplate.update("""
+                        UPDATE conversations
+                        SET status = 'BLOCKED',
+                            updated_at = ?
+                        WHERE id = ?
+                          AND (buyer_id = ? OR seller_id = ?)
+                          AND status <> 'BLOCKED'
+                        """,
+                Timestamp.from(blockedAt),
+                conversationId,
+                userId,
+                userId
+        );
+    }
+
+    public int expireExpiredBargains(long conversationId, Instant now) {
+        return jdbcTemplate.update("""
+                        UPDATE system_message_cards
+                        SET action_status = 'EXPIRED',
+                            acted_at = ?
+                        WHERE conversation_id = ?
+                          AND card_type = 'BARGAIN_OFFER'
+                          AND action_status = 'PENDING'
+                          AND expires_at IS NOT NULL
+                          AND expires_at < ?
+                        """,
+                Timestamp.from(now),
+                conversationId,
+                Timestamp.from(now)
+        );
     }
 
     public boolean hasOpenOrderForGoods(long goodsId) {
@@ -321,6 +569,8 @@ public class ConversationRepository {
                     resultSet.getObject("last_message_id", Long.class),
                     resultSet.getString("last_message_text"),
                     nullableInstant(resultSet, "last_message_at"),
+                    resultSet.getLong("unread_count"),
+                    nullableInstant(resultSet, "archived_at"),
                     resultSet.getTimestamp("created_at").toInstant(),
                     resultSet.getTimestamp("updated_at").toInstant()
             );
@@ -360,6 +610,22 @@ public class ConversationRepository {
                     resultSet.getTimestamp("created_at").toInstant(),
                     nullableInstant(resultSet, "expires_at"),
                     nullableInstant(resultSet, "acted_at")
+            );
+        }
+    }
+
+    private static class MessageAttachmentRowMapper implements RowMapper<MessageAttachmentRecord> {
+
+        @Override
+        public MessageAttachmentRecord mapRow(ResultSet resultSet, int rowNum) throws SQLException {
+            return new MessageAttachmentRecord(
+                    resultSet.getLong("id"),
+                    resultSet.getLong("message_id"),
+                    resultSet.getLong("file_id"),
+                    resultSet.getString("original_name"),
+                    resultSet.getString("content_type"),
+                    resultSet.getLong("byte_size"),
+                    resultSet.getInt("sort_order")
             );
         }
     }

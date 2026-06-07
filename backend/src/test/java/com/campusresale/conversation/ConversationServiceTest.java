@@ -17,12 +17,15 @@ import com.campusresale.goods.GoodsRepository;
 import com.campusresale.goods.GoodsStatus;
 import com.campusresale.notification.NotificationService;
 import com.campusresale.platform.api.ApiException;
+import com.campusresale.platform.audit.AuditLogRepository;
 import com.campusresale.platform.security.CurrentPrincipal;
+import com.campusresale.files.FileRepository;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 class ConversationServiceTest {
@@ -30,7 +33,22 @@ class ConversationServiceTest {
     private final ConversationRepository conversationRepository = org.mockito.Mockito.mock(ConversationRepository.class);
     private final GoodsRepository goodsRepository = org.mockito.Mockito.mock(GoodsRepository.class);
     private final NotificationService notificationService = org.mockito.Mockito.mock(NotificationService.class);
-    private final ConversationService service = new ConversationService(conversationRepository, goodsRepository, notificationService);
+    private final FileRepository fileRepository = org.mockito.Mockito.mock(FileRepository.class);
+    private final AuditLogRepository auditLogRepository = org.mockito.Mockito.mock(AuditLogRepository.class);
+    private final ConversationRealtimeGateway realtimeGateway = org.mockito.Mockito.mock(ConversationRealtimeGateway.class);
+    private final ConversationService service = new ConversationService(
+            conversationRepository,
+            goodsRepository,
+            notificationService,
+            fileRepository,
+            auditLogRepository,
+            realtimeGateway
+    );
+
+    @BeforeEach
+    void setUp() {
+        when(conversationRepository.listAttachmentsByMessageIds(any())).thenReturn(List.of());
+    }
 
     @Test
     void createConversationRejectsOwnGoods() {
@@ -61,7 +79,7 @@ class ConversationServiceTest {
         when(conversationRepository.createTextMessage(eq(20L), eq(2L), eq("还在吗？"), any())).thenReturn(30L);
         when(conversationRepository.findMessageById(30L)).thenReturn(Optional.of(message()));
 
-        MessageResponse response = service.sendText(20L, new SendMessageRequest(" 还在吗？ "), principal(2L));
+        MessageResponse response = service.sendText(20L, new SendMessageRequest(" 还在吗？ ", null), principal(2L));
 
         assertThat(response.textContent()).isEqualTo("还在吗？");
         verify(notificationService).notifyMessageReceived(1L, 20L, "九成新显示器");
@@ -97,7 +115,7 @@ class ConversationServiceTest {
         BargainCardResponse response = service.acceptBargain(20L, 40L, principal(1L));
 
         assertThat(response.actionStatus()).isEqualTo("ACCEPTED");
-        verify(conversationRepository).createBargainDecisionMessage(eq(20L), eq(40L), eq("卖家已接受议价"), any());
+        verify(conversationRepository).createBargainDecisionMessageReturningId(eq(20L), eq(40L), eq("卖家已接受议价"), any());
         verify(notificationService).notifyBargainAccepted(2L, 20L, "九成新显示器");
     }
 
@@ -149,6 +167,8 @@ class ConversationServiceTest {
                 "NORMAL",
                 null,
                 null,
+                null,
+                0,
                 null,
                 Instant.parse("2026-06-01T00:00:00Z"),
                 Instant.parse("2026-06-01T00:00:00Z")

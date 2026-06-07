@@ -112,9 +112,22 @@ public class FileService {
             throw ApiExceptions.notFound("文件不存在或不可见");
         }
 
+        if (record.visibilityScope() == VisibilityScope.PARTICIPANTS && record.fileKind() == FileKind.MESSAGE_IMAGE) {
+            if (currentPrincipal != null && isOwner(record, currentPrincipal) && record.businessId() == null) {
+                return originalContent(record);
+            }
+            if (currentPrincipal != null && fileRepository.isMessageAttachmentParticipant(record.id(), currentPrincipal.id())) {
+                return originalContent(record);
+            }
+            if (currentPrincipal != null && isAdmin(currentPrincipal)) {
+                return originalSensitiveContent(record, currentPrincipal, "PRIVATE_MESSAGE_IMAGE", reason, ipAddress);
+            }
+            throw ApiExceptions.notFound("文件不存在或不可见");
+        }
+
         if (record.visibilityScope() == VisibilityScope.ADMIN_ONLY && record.fileKind() == FileKind.CAMPUS_AUTH_MATERIAL) {
             if (currentPrincipal != null && isAdmin(currentPrincipal)) {
-                return originalSensitiveContent(record, currentPrincipal, reason, ipAddress);
+                return originalSensitiveContent(record, currentPrincipal, "CAMPUS_AUTH_MATERIAL", reason, ipAddress);
             }
             if (currentPrincipal != null && isOwner(record, currentPrincipal)) {
                 return redactedPreview(record);
@@ -153,21 +166,28 @@ public class FileService {
         if (isAdmin(currentPrincipal) || isOwner(record, currentPrincipal)) {
             return;
         }
+        if (record.visibilityScope() == VisibilityScope.PARTICIPANTS
+                && record.fileKind() == FileKind.MESSAGE_IMAGE
+                && fileRepository.isMessageAttachmentParticipant(record.id(), currentPrincipal.id())) {
+            return;
+        }
         throw ApiExceptions.notFound("文件不存在或不可见");
     }
 
     private FileContentResponse originalSensitiveContent(
             StoredFileRecord record,
             CurrentPrincipal principal,
+            String targetType,
             String reason,
             String ipAddress
     ) {
-        String accessReason = reason == null || reason.isBlank() ? "审核认证材料" : reason.trim();
+        String defaultReason = "PRIVATE_MESSAGE_IMAGE".equals(targetType) ? "查看私信图片" : "审核认证材料";
+        String accessReason = reason == null || reason.isBlank() ? defaultReason : reason.trim();
         try {
             FileContentResponse response = originalContent(record);
             auditLogRepository.recordSensitiveAccess(
                     principal.id(),
-                    "CAMPUS_AUTH_MATERIAL",
+                    targetType,
                     record.id(),
                     accessReason,
                     "ALLOWED",
@@ -177,7 +197,7 @@ public class FileService {
         } catch (RuntimeException exception) {
             auditLogRepository.recordSensitiveAccess(
                     principal.id(),
-                    "CAMPUS_AUTH_MATERIAL",
+                    targetType,
                     record.id(),
                     accessReason,
                     "FAILED",
@@ -349,6 +369,12 @@ public class FileService {
                 throw ApiExceptions.validation("交易与治理证据文件必须为 PRIVATE", Map.of("field", "visibilityScope"));
             }
             return VisibilityScope.PRIVATE;
+        }
+        if (fileKind == FileKind.MESSAGE_IMAGE) {
+            if (requestedScope != null && requestedScope != VisibilityScope.PARTICIPANTS) {
+                throw ApiExceptions.validation("私信图片必须为 PARTICIPANTS", Map.of("field", "visibilityScope"));
+            }
+            return VisibilityScope.PARTICIPANTS;
         }
         if (requestedScope == null) {
             return VisibilityScope.PUBLIC;

@@ -10,8 +10,11 @@ public record ConversationSummary(
         ConversationParticipant buyer,
         ConversationParticipant seller,
         String status,
+        Long lastMessageId,
         String lastMessageText,
         Instant lastMessageAt,
+        long unreadCount,
+        boolean archived,
         Instant createdAt,
         Instant updatedAt
 ) {
@@ -25,8 +28,11 @@ public record ConversationSummary(
                 new ConversationParticipant(record.buyerId(), record.buyerNickname()),
                 new ConversationParticipant(record.sellerId(), record.sellerNickname()),
                 record.status(),
+                record.lastMessageId(),
                 record.lastMessageText(),
                 record.lastMessageAt(),
+                record.unreadCount(),
+                record.archivedAt() != null,
                 record.createdAt(),
                 record.updatedAt()
         );
