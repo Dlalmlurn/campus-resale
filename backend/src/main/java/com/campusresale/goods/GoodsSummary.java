@@ -13,6 +13,7 @@ public record GoodsSummary(
         SellerSummary seller,
         CategorySummary category,
         GoodsImageSummary primaryImage,
+        String recommendationReason,
         Instant publishedAt
 ) {
 }

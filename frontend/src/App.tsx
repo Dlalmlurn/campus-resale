@@ -12,6 +12,7 @@ import {
   FileUp,
   Filter,
   Home,
+  Heart,
   LogIn,
   LogOut,
   MessageSquareText,
@@ -22,12 +23,14 @@ import {
   ShieldAlert,
   ShoppingBag,
   Store,
+  UserPlus,
   UserRound,
   X
 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError } from "./api/client";
 import { createConversation } from "./api/conversations";
+import { addFavorite, followUser } from "./api/governance";
 import { assistGoods, type GoodsAssistResponse } from "./api/intelligence";
 import {
   createGoodsDraft,
@@ -154,7 +157,7 @@ export function App() {
   const refreshGoods = useCallback(async () => {
     setLoadingGoods(true);
     try {
-      const response = await getPublicGoods({ keyword: query, categoryId, sort: "NEWEST" });
+      const response = await getPublicGoods({ keyword: query, categoryId, sort: "RECOMMENDED" });
       setPublicGoods(response.items);
       setGoodsTotal(response.total);
     } catch (error) {
@@ -299,12 +302,14 @@ export function App() {
             goods={publicGoods}
             total={goodsTotal}
             loading={loadingGoods}
+            currentUser={currentUser}
             query={query}
             categoryId={categoryId}
             onQueryChange={setQuery}
             onCategoryChange={setCategoryId}
             onSearch={() => void refreshGoods()}
             onOpen={(id) => navigate({ name: "goods", id })}
+            notify={notify}
           />
         )}
         {route.name === "goods" && <GoodsDetailPage id={route.id} catalog={catalog} currentUser={currentUser} navigate={navigate} onBack={() => navigate({ name: "market" })} notify={notify} />}
@@ -328,13 +333,28 @@ function MarketPage(props: {
   goods: GoodsSummary[];
   total: number;
   loading: boolean;
+  currentUser: CurrentUser | null;
   query: string;
   categoryId: string;
   onQueryChange: (value: string) => void;
   onCategoryChange: (value: string) => void;
   onSearch: () => void;
   onOpen: (id: number) => void;
+  notify: Notify;
 }) {
+  const runCardAction = async (action: () => Promise<unknown>, success: string) => {
+    if (!props.currentUser) {
+      props.notify("error", "请先登录后继续");
+      return;
+    }
+    try {
+      await action();
+      props.notify("success", success);
+    } catch (error) {
+      props.notify("error", messageOf(error));
+    }
+  };
+
   return (
     <>
       <section className="page-heading market-heading">
@@ -369,22 +389,43 @@ function MarketPage(props: {
       </section>
       <section className="goods-grid" aria-label="商品列表">
         {props.loading ? <LoadingBlock /> : props.goods.length === 0 ? <EmptyBlock title="暂时没有匹配商品" /> : props.goods.map((item) => (
-          <button className="goods-card" type="button" key={item.id} onClick={() => props.onOpen(item.id)}>
-            <GoodsImage item={item} />
-            <div className="goods-card-body">
-              <div className="goods-card-topline">
-                <span>{item.category.name}</span>
-                <span>{conditionLabels[item.conditionLevel] ?? item.conditionLevel}</span>
+          <article className="goods-card" key={item.id}>
+            <button className="goods-card-main" type="button" onClick={() => props.onOpen(item.id)}>
+              <GoodsImage item={item} />
+              <div className="goods-card-body">
+                <div className="goods-card-topline">
+                  <span>{item.category.name}</span>
+                  <span>{conditionLabels[item.conditionLevel] ?? item.conditionLevel}</span>
+                </div>
+                <h2>{item.title}</h2>
+                <p>{item.description}</p>
+                {item.recommendationReason && <p className="recommendation-reason">推荐理由：{item.recommendationReason}</p>}
+                <div className="goods-card-footer">
+                  <strong>¥{item.listPrice}</strong>
+                  <span>{item.seller.nickname}</span>
+                </div>
               </div>
-              <h2>{item.title}</h2>
-              <p>{item.description}</p>
-              {item.recommendationReason && <p className="recommendation-reason">推荐理由：{item.recommendationReason}</p>}
-              <div className="goods-card-footer">
-                <strong>¥{item.listPrice}</strong>
-                <span>{item.seller.nickname}</span>
-              </div>
+            </button>
+            <div className="goods-card-actions">
+              <button
+                className="secondary-button compact"
+                type="button"
+                aria-label={`收藏 ${item.title}`}
+                onClick={() => void runCardAction(() => addFavorite(item.id), "已收藏商品")}
+              >
+                <Heart size={16} /> 收藏
+              </button>
+              <button
+                className="secondary-button compact"
+                type="button"
+                aria-label={`关注 ${item.seller.nickname}`}
+                disabled={props.currentUser?.id === item.seller.id}
+                onClick={() => void runCardAction(() => followUser(item.seller.id), "已关注卖家")}
+              >
+                <UserPlus size={16} /> 关注卖家
+              </button>
             </div>
-          </button>
+          </article>
         ))}
       </section>
     </>
@@ -1140,7 +1181,8 @@ function notificationTypeLabel(value: string) {
     MESSAGE_RECEIVED: "私信消息",
     BARGAIN_OFFERED: "收到议价",
     BARGAIN_ACCEPTED: "议价接受",
-    BARGAIN_REJECTED: "议价拒绝"
+    BARGAIN_REJECTED: "议价拒绝",
+    AI_REVIEW_REMINDER: "AI 风险提醒"
   } as Record<string, string>)[value] ?? value;
 }
 

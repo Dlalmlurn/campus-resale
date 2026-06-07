@@ -35,6 +35,12 @@ public class GoodsRepository {
                    g.status,
                    g.audit_status,
                    pi.file_id AS primary_image_file_id,
+                   CASE
+                       WHEN c.code = 'BOOKS' THEN '教材资料匹配你的浏览偏好'
+                       WHEN g.published_at >= now() - interval '7 days' THEN '近期上新，适合先看'
+                       WHEN g.condition_level IN ('NEW', 'LIKE_NEW') THEN '成色较新，适合优先比较'
+                       ELSE '校内闲置，支持线下面交'
+                   END AS recommendation_reason,
                    g.published_at,
                    g.created_at,
                    g.updated_at
@@ -472,6 +478,16 @@ public class GoodsRepository {
             sql.append(" ORDER BY g.list_price ASC, g.published_at DESC, g.id DESC");
         } else if ("PRICE_DESC".equals(sort)) {
             sql.append(" ORDER BY g.list_price DESC, g.published_at DESC, g.id DESC");
+        } else if ("RECOMMENDED".equals(sort)) {
+            sql.append("""
+                     ORDER BY CASE
+                         WHEN c.code = 'BOOKS' THEN 0
+                         WHEN g.condition_level IN ('NEW', 'LIKE_NEW') THEN 1
+                         ELSE 2
+                     END,
+                     g.published_at DESC,
+                     g.id DESC
+                    """);
         } else {
             sql.append(" ORDER BY g.published_at DESC, g.id DESC");
         }
@@ -552,6 +568,7 @@ public class GoodsRepository {
                     GoodsStatus.valueOf(resultSet.getString("status")),
                     GoodsAuditStatus.valueOf(resultSet.getString("audit_status")),
                     resultSet.getObject("primary_image_file_id", Long.class),
+                    resultSet.getString("recommendation_reason"),
                     nullableInstant(resultSet, "published_at"),
                     resultSet.getTimestamp("created_at").toInstant(),
                     resultSet.getTimestamp("updated_at").toInstant()

@@ -2,10 +2,13 @@ package com.campusresale.intelligence;
 
 import com.campusresale.intelligence.IntelligenceRequests.GoodsAssistRequest;
 import com.campusresale.intelligence.IntelligenceResponses.GoodsAssistResponse;
+import com.campusresale.notification.NotificationService;
+import com.campusresale.notification.NotificationType;
 import com.campusresale.platform.api.ApiExceptions;
 import com.campusresale.platform.audit.AuditLogRepository;
 import com.campusresale.platform.config.SystemConfigRepository;
 import com.campusresale.platform.security.CurrentPrincipal;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -20,15 +23,18 @@ public class IntelligenceService {
     private final IntelligenceRepository intelligenceRepository;
     private final SystemConfigRepository systemConfigRepository;
     private final AuditLogRepository auditLogRepository;
+    private final NotificationService notificationService;
 
     public IntelligenceService(
             IntelligenceRepository intelligenceRepository,
             SystemConfigRepository systemConfigRepository,
-            AuditLogRepository auditLogRepository
+            AuditLogRepository auditLogRepository,
+            NotificationService notificationService
     ) {
         this.intelligenceRepository = intelligenceRepository;
         this.systemConfigRepository = systemConfigRepository;
         this.auditLogRepository = auditLogRepository;
+        this.notificationService = notificationService;
     }
 
     public GoodsAssistResponse assistGoods(GoodsAssistRequest request, CurrentPrincipal principal, String ipAddress) {
@@ -59,6 +65,18 @@ public class IntelligenceService {
                 advice.recommendationReason(),
                 AUDIT_REMINDER
         );
+        intelligenceRepository.updateRecordDetails(requestId, title, description, normalizedPrice(request.price()), response);
+        if ("HIGH".equals(advice.riskLevel())) {
+            notificationService.create(
+                    principal.id(),
+                    NotificationType.AI_REVIEW_REMINDER,
+                    "AI 发布风险提醒",
+                    "AI 发现该商品文案存在高风险词，请人工修改后再提交审核。",
+                    "INTELLIGENCE_RECORD",
+                    requestId,
+                    "ai:goods-assist:" + requestId + ":user:" + principal.id()
+            );
+        }
         auditLogRepository.recordOperation(principal.id(), "AI_GOODS_ASSIST", "INTELLIGENCE_RECORD", requestId, null, response, ipAddress);
         return response;
     }
@@ -115,6 +133,17 @@ public class IntelligenceService {
     private static String compactTitle(String title) {
         String value = title.trim();
         return value.length() > 28 ? value.substring(0, 28) : value;
+    }
+
+    private static String normalizedPrice(String price) {
+        if (price == null || price.isBlank()) {
+            return null;
+        }
+        try {
+            return new BigDecimal(price.trim()).setScale(2, java.math.RoundingMode.HALF_UP).toPlainString();
+        } catch (NumberFormatException exception) {
+            return null;
+        }
     }
 
     private static String required(String value, String field, String message) {

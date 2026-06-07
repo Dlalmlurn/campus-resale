@@ -187,6 +187,19 @@ describe("App", () => {
     await waitFor(() => expect(screen.getByText("数据库课程复习资料")).toBeInTheDocument());
     expect(screen.getByText("AI 仅提供辅助建议，不会自动审核、下架或处罚。")).toBeInTheDocument();
   });
+
+  it("lets buyers favorite goods and follow sellers from discovery cards", async () => {
+    stubBackend(verifiedBuyer);
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByText("数据库原理教材")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "收藏 数据库原理教材" }));
+    await waitFor(() => expect(screen.getByText("已收藏商品")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "关注 晨晨" }));
+
+    await waitFor(() => expect(screen.getByText("已关注卖家")).toBeInTheDocument());
+  });
 });
 
 function stubBackend(currentUser?: CurrentUser) {
@@ -266,6 +279,8 @@ function stubBackend(currentUser?: CurrentUser) {
       total: 1
     });
     if (url === "/api/notifications/read-all") return response({ updatedCount: 1 });
+    if (url === "/api/n3/favorites/10") return response({ active: true });
+    if (url === "/api/n3/follows/3") return response({ active: true });
     if (url === "/api/orders/77/payment") return response({
       id: 501,
       paymentNo: "PAY202606050001",
