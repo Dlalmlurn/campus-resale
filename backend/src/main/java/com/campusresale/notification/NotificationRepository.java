@@ -167,6 +167,22 @@ public class NotificationRepository {
         );
     }
 
+    public int markRelatedRead(long receiverUserId, String relatedType, long relatedId, Instant readAt) {
+        return jdbcTemplate.update("""
+                        UPDATE notifications
+                        SET read_at = COALESCE(read_at, ?)
+                        WHERE receiver_user_id = ?
+                          AND related_type = ?
+                          AND related_id = ?
+                          AND read_at IS NULL
+                        """,
+                Timestamp.from(readAt),
+                receiverUserId,
+                relatedType,
+                relatedId
+        );
+    }
+
     private Long insert(
             long receiverUserId,
             NotificationType type,

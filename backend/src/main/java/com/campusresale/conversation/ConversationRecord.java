@@ -15,6 +15,8 @@ public record ConversationRecord(
         Long lastMessageId,
         String lastMessageText,
         Instant lastMessageAt,
+        long unreadCount,
+        Instant archivedAt,
         Instant createdAt,
         Instant updatedAt
 ) {

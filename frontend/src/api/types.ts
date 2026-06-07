@@ -186,10 +186,22 @@ export interface ConversationSummary {
   buyer: ConversationParticipant;
   seller: ConversationParticipant;
   status: string;
+  lastMessageId?: number | null;
   lastMessageText?: string | null;
   lastMessageAt?: string | null;
+  unreadCount: number;
+  archived: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface MessageAttachmentSummary {
+  id: number;
+  fileId: number;
+  originalName: string;
+  contentType: string;
+  byteSize: number;
+  url: string;
 }
 
 export interface MessageSummary {
@@ -200,6 +212,7 @@ export interface MessageSummary {
   status: string;
   textContent?: string | null;
   cardId?: number | null;
+  attachments: MessageAttachmentSummary[];
   sentAt: string;
 }
 
@@ -220,4 +233,14 @@ export interface ConversationDetail {
   conversation: ConversationSummary;
   messages: MessageSummary[];
   bargainCards: BargainCardSummary[];
+}
+
+export interface ConversationRealtimeEvent {
+  type: "MESSAGE_RECEIVED" | "BARGAIN_OFFERED" | "BARGAIN_ACCEPTED" | "BARGAIN_REJECTED" | string;
+  conversationId: number;
+  message?: MessageSummary | null;
+  bargainCard?: BargainCardSummary | null;
+  conversation?: ConversationSummary | null;
+  receiverUserId?: number | null;
+  occurredAt: string;
 }

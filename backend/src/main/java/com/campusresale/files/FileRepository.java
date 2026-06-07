@@ -169,6 +169,25 @@ public class FileRepository {
         );
     }
 
+    public boolean isMessageAttachmentParticipant(long fileId, long userId) {
+        Boolean exists = jdbcTemplate.queryForObject("""
+                        SELECT EXISTS (
+                            SELECT 1
+                            FROM message_attachments ma
+                            JOIN messages m ON m.id = ma.message_id
+                            JOIN conversations c ON c.id = m.conversation_id
+                            WHERE ma.file_id = ?
+                              AND (c.buyer_id = ? OR c.seller_id = ?)
+                        )
+                        """,
+                Boolean.class,
+                fileId,
+                userId,
+                userId
+        );
+        return Boolean.TRUE.equals(exists);
+    }
+
     public void updateCampusAuthMaterialAuditStatus(long campusAuthId, FileAuditStatus auditStatus) {
         jdbcTemplate.update("""
                         UPDATE stored_files sf

@@ -1,23 +1,31 @@
-import { HandCoins, MessageSquareText, RefreshCw, Send, ShoppingBag } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { Archive, Ban, HandCoins, ImagePlus, MessageSquareText, RefreshCw, Send, ShoppingBag, Wifi, WifiOff } from "lucide-react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  archiveConversation,
+  blockConversation,
   acceptBargainCard,
   createBargainCard,
   getConversationDetail,
+  getConversationMessagesAfter,
   getConversations,
   rejectBargainCard,
+  sendConversationImageMessage,
   sendConversationMessage
 } from "../api/conversations";
+import { uploadFile } from "../api/m1";
 import { createOrder } from "../api/orders";
 import type {
   BargainCardSummary,
   CampusPlaceSummary,
   ConversationDetail,
+  ConversationRealtimeEvent,
   ConversationSummary,
-  CurrentUser
+  CurrentUser,
+  MessageSummary
 } from "../api/types";
 
 type Notify = (tone: "success" | "error", text: string) => void;
+type ConnectionState = "connecting" | "online" | "offline";
 
 const bargainStatusLabels: Record<string, string> = {
   PENDING: "待处理",
@@ -61,11 +69,16 @@ export function ConversationsPage(props: {
       <div className="conversation-list">
         {loading ? <StateBlock title="会话加载中" /> : items.length === 0 ? <StateBlock title="暂无会话" /> : items.map((item) => {
           const role = item.buyer.id === props.currentUser.id ? "我是买家" : "我是卖家";
+          const unread = item.unreadCount > 0;
           return (
-            <button className="conversation-row" type="button" key={item.id} onClick={() => props.onOpenConversation(item.id)}>
+            <button className={`conversation-row ${unread ? "unread" : ""}`} type="button" key={item.id} onClick={() => props.onOpenConversation(item.id)}>
               <div className="conversation-thumb"><ShoppingBag size={22} /></div>
               <div>
-                <div className="badge-row"><span className="badge neutral">{role}</span><span className="badge success">{item.status}</span></div>
+                <div className="badge-row">
+                  <span className="badge neutral">{role}</span>
+                  <span className={item.status === "BLOCKED" ? "badge danger" : "badge success"}>{item.status}</span>
+                  {unread && <span className="badge warning">{item.unreadCount} 条未读</span>}
+                </div>
                 <h2>{item.goodsTitle}</h2>
                 <p>{item.lastMessageText || "还没有文本消息"} · {formatDate(item.lastMessageAt ?? item.createdAt)}</p>
               </div>
@@ -86,10 +99,16 @@ export function ConversationDetailPage(props: {
   onOpenOrder: (id: number) => void;
 }) {
   const [detail, setDetail] = useState<ConversationDetail | null>(null);
+  const detailRef = useRef<ConversationDetail | null>(null);
+  const [connection, setConnection] = useState<ConnectionState>("connecting");
   const [message, setMessage] = useState("");
   const [bargain, setBargain] = useState({ amount: "", note: "" });
   const [orderForm, setOrderForm] = useState({ tradePlaceId: "", tradePlaceDetail: "", meetupTime: "", note: "" });
   const [busy, setBusy] = useState(false);
+  const [imageBusy, setImageBusy] = useState(false);
+  const [imageError, setImageError] = useState("");
+
+  useEffect(() => { detailRef.current = detail; }, [detail]);
 
   const load = useCallback(async () => {
     try {
@@ -99,25 +118,97 @@ export function ConversationDetailPage(props: {
     }
   }, [props.id, props.notify]);
 
+  const syncMissing = useCallback(async () => {
+    const current = detailRef.current;
+    if (!current) {
+      await load();
+      return;
+    }
+    try {
+      const missing = await getConversationMessagesAfter(props.id, latestMessageId(current.messages));
+      if (missing.length > 0) {
+        setDetail((value) => value ? mergeDetail(value, { conversationId: props.id, message: missing[missing.length - 1], occurredAt: new Date().toISOString(), type: "MESSAGE_RECEIVED" }, missing) : value);
+      }
+    } catch (error) {
+      setConnection("offline");
+    }
+  }, [load, props.id]);
+
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    let closed = false;
+    const socket = new WebSocket(`${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/ws/conversations`);
+    setConnection("connecting");
+    socket.onopen = () => {
+      if (closed) return;
+      setConnection("online");
+      socket.send(JSON.stringify({ type: "SUBSCRIBE_CONVERSATION", conversationId: props.id }));
+      void syncMissing();
+    };
+    socket.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data) as ConversationRealtimeEvent;
+        if (payload.conversationId !== props.id) return;
+        setDetail((value) => value ? mergeDetail(value, payload) : value);
+      } catch {
+        // Ignore control frames and malformed development proxy responses.
+      }
+    };
+    socket.onerror = () => {
+      setConnection("offline");
+      socket.close();
+    };
+    socket.onclose = () => {
+      if (!closed) setConnection("offline");
+    };
+    return () => {
+      closed = true;
+      socket.close();
+    };
+  }, [props.id, syncMissing]);
+
+  useEffect(() => {
+    if (connection === "online") return;
+    const timer = window.setInterval(() => void syncMissing(), 5000);
+    return () => window.clearInterval(timer);
+  }, [connection, syncMissing]);
 
   const conversation = detail?.conversation;
   const isBuyer = conversation?.buyer.id === props.currentUser.id;
   const isSeller = conversation?.seller.id === props.currentUser.id;
   const acceptedBargain = useMemo(() => latestAcceptedBargain(detail?.bargainCards ?? []), [detail?.bargainCards]);
+  const canWrite = conversation?.status === "NORMAL";
 
   const send = async (event: FormEvent) => {
     event.preventDefault();
-    if (!message.trim()) return;
+    if (!message.trim() || !canWrite) return;
     setBusy(true);
     try {
-      await sendConversationMessage(props.id, message);
+      const sent = await sendConversationMessage(props.id, message);
       setMessage("");
-      await load();
+      setDetail((value) => value ? mergeDetail(value, { type: "MESSAGE_RECEIVED", conversationId: props.id, message: sent, occurredAt: sent.sentAt }) : value);
     } catch (error) {
       props.notify("error", messageOf(error));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const uploadImage = async (file?: File) => {
+    if (!file || !canWrite) return;
+    setImageBusy(true);
+    setImageError("");
+    try {
+      const uploaded = await uploadFile(file, "MESSAGE_IMAGE");
+      const sent = await sendConversationImageMessage(props.id, [uploaded.id]);
+      setDetail((value) => value ? mergeDetail(value, { type: "MESSAGE_RECEIVED", conversationId: props.id, message: sent, occurredAt: sent.sentAt }) : value);
+    } catch (error) {
+      const text = messageOf(error);
+      setImageError(text);
+      props.notify("error", text);
+    } finally {
+      setImageBusy(false);
     }
   };
 
@@ -147,6 +238,32 @@ export function ConversationDetailPage(props: {
         props.notify("success", "已拒绝议价");
       }
       await load();
+    } catch (error) {
+      props.notify("error", messageOf(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const archive = async () => {
+    setBusy(true);
+    try {
+      await archiveConversation(props.id);
+      props.notify("success", "会话已归档");
+      props.onBack();
+    } catch (error) {
+      props.notify("error", messageOf(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const block = async () => {
+    setBusy(true);
+    try {
+      const updated = await blockConversation(props.id);
+      setDetail((value) => value ? { ...value, conversation: updated } : value);
+      props.notify("success", "会话已屏蔽");
     } catch (error) {
       props.notify("error", messageOf(error));
     } finally {
@@ -188,7 +305,7 @@ export function ConversationDetailPage(props: {
               <p className="eyebrow">商品会话</p>
               <h1>{conversation.goodsTitle}</h1>
             </div>
-            <span className="badge neutral">{isBuyer ? "我是买家" : "我是卖家"}</span>
+            <span className={`badge ${connection === "online" ? "success" : "warning"}`}>{connection === "online" ? <Wifi size={13} /> : <WifiOff size={13} />}{connection === "online" ? "实时在线" : "轮询补偿"}</span>
           </div>
           <div className="message-list">
             {detail.messages.length === 0 ? <StateBlock title="还没有消息" /> : detail.messages.map((item) => {
@@ -197,18 +314,29 @@ export function ConversationDetailPage(props: {
               return (
                 <div className={`message-bubble ${mine ? "mine" : ""}`} key={item.id}>
                   <small>{item.sender?.nickname ?? "系统"} · {formatDate(item.sentAt)}</small>
-                  {card ? <BargainCard card={card} isSeller={Boolean(isSeller)} busy={busy} onAccept={() => void decide(card.id, "accept")} onReject={() => void decide(card.id, "reject")} /> : <p>{item.textContent}</p>}
+                  {card ? <BargainCard card={card} isSeller={Boolean(isSeller)} busy={busy} onAccept={() => void decide(card.id, "accept")} onReject={() => void decide(card.id, "reject")} /> : <MessageBody item={item} />}
                 </div>
               );
             })}
           </div>
           <form className="message-compose" onSubmit={(event) => void send(event)}>
-            <input value={message} onChange={(event) => setMessage(event.target.value)} placeholder="输入消息" />
-            <button className="primary-button compact" disabled={busy || !message.trim()} type="submit"><Send size={16} /> 发送</button>
+            <label className="icon-button image-button" aria-label="发送图片">
+              <ImagePlus size={17} />
+              <input accept="image/jpeg,image/png,image/webp" disabled={imageBusy || busy || !canWrite} type="file" onChange={(event) => void uploadImage(event.target.files?.[0])} />
+            </label>
+            <input value={message} disabled={!canWrite} onChange={(event) => setMessage(event.target.value)} placeholder={canWrite ? "输入消息" : "会话当前不可发送消息"} />
+            <button className="primary-button compact" disabled={busy || !message.trim() || !canWrite} type="submit"><Send size={16} /> 发送</button>
           </form>
+          {imageError && <p className="form-hint error-text">{imageError}</p>}
         </article>
         <aside className="side-panel conversation-side">
-          {isBuyer && (
+          <div className="conversation-actions">
+            <span className="badge neutral">{isBuyer ? "我是买家" : "我是卖家"}</span>
+            <button className="secondary-button compact" disabled={busy} type="button" onClick={() => void archive()}><Archive size={15} /> 归档</button>
+            <button className="secondary-button compact danger-action" disabled={busy || conversation.status === "BLOCKED"} type="button" onClick={() => void block()}><Ban size={15} /> 屏蔽</button>
+          </div>
+          {!canWrite && <p className="closed-hint">会话已屏蔽，不能继续发送消息或议价。</p>}
+          {isBuyer && canWrite && (
             <form className="inline-action" onSubmit={(event) => void submitBargain(event)}>
               <div className="panel-title"><h2><HandCoins size={17} /> 发起议价</h2></div>
               <label><span>议价金额</span><input required min="0.01" step="0.01" type="number" value={bargain.amount} onChange={(event) => setBargain({ ...bargain, amount: event.target.value })} /></label>
@@ -236,6 +364,21 @@ export function ConversationDetailPage(props: {
   );
 }
 
+function MessageBody({ item }: { item: MessageSummary }) {
+  return (
+    <>
+      {item.textContent && <p>{item.textContent}</p>}
+      {item.attachments.length > 0 && (
+        <div className="message-attachments">
+          {item.attachments.map((attachment) => (
+            <img alt={attachment.originalName} key={attachment.id} src={attachment.url} />
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 function BargainCard(props: {
   card: BargainCardSummary;
   isSeller: boolean;
@@ -243,10 +386,12 @@ function BargainCard(props: {
   onAccept?: () => void;
   onReject?: () => void;
 }) {
-  const actionable = props.isSeller && props.card.actionStatus === "PENDING";
+  const expired = isExpired(props.card);
+  const status = expired && props.card.actionStatus === "PENDING" ? "EXPIRED" : props.card.actionStatus;
+  const actionable = props.isSeller && status === "PENDING";
   return (
-    <div className="bargain-card">
-      <div><strong>¥{props.card.amount}</strong><span className="badge warning">{bargainStatusLabels[props.card.actionStatus] ?? props.card.actionStatus}</span></div>
+    <div className={`bargain-card ${expired ? "expired" : ""}`}>
+      <div><strong>¥{props.card.amount}</strong><span className="badge warning">{bargainStatusLabels[status] ?? status}</span></div>
       {props.card.note && <p>{props.card.note}</p>}
       <small>有效至 {formatDate(props.card.expiresAt)}</small>
       {actionable && <div className="button-row"><button className="primary-button compact" disabled={props.busy} type="button" onClick={props.onAccept}>接受</button><button className="secondary-button compact" disabled={props.busy} type="button" onClick={props.onReject}>拒绝</button></div>}
@@ -254,10 +399,53 @@ function BargainCard(props: {
   );
 }
 
+function mergeDetail(detail: ConversationDetail, event: ConversationRealtimeEvent, missingMessages: MessageSummary[] = []) {
+  const messages = mergeMessages(detail.messages, missingMessages.length > 0 ? missingMessages : event.message ? [event.message] : []);
+  const last = messages[messages.length - 1];
+  return {
+    ...detail,
+    conversation: {
+      ...(event.conversation ?? detail.conversation),
+      lastMessageId: last?.id ?? detail.conversation.lastMessageId ?? null,
+      lastMessageText: last ? previewMessage(last) : detail.conversation.lastMessageText,
+      lastMessageAt: last?.sentAt ?? detail.conversation.lastMessageAt,
+      unreadCount: 0
+    },
+    messages,
+    bargainCards: event.bargainCard ? mergeBargainCards(detail.bargainCards, [event.bargainCard]) : detail.bargainCards
+  };
+}
+
+function mergeMessages(current: MessageSummary[], incoming: MessageSummary[]) {
+  const byId = new Map(current.map((message) => [message.id, message]));
+  incoming.forEach((message) => byId.set(message.id, message));
+  return [...byId.values()].sort((a, b) => a.id - b.id);
+}
+
+function mergeBargainCards(current: BargainCardSummary[], incoming: BargainCardSummary[]) {
+  const byId = new Map(current.map((card) => [card.id, card]));
+  incoming.forEach((card) => byId.set(card.id, card));
+  return [...byId.values()].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+}
+
 function latestAcceptedBargain(cards: BargainCardSummary[]) {
   return [...cards]
-    .filter((card) => card.actionStatus === "ACCEPTED")
+    .filter((card) => card.actionStatus === "ACCEPTED" && !isExpired(card))
     .sort((a, b) => new Date(b.actedAt ?? b.createdAt).getTime() - new Date(a.actedAt ?? a.createdAt).getTime())[0] ?? null;
+}
+
+function latestMessageId(messages: MessageSummary[]) {
+  return messages.reduce((max, message) => Math.max(max, message.id), 0);
+}
+
+function previewMessage(message: MessageSummary) {
+  if (message.cardId) return message.textContent ?? "系统卡片";
+  if (message.attachments.length > 0) return message.textContent || "[图片]";
+  return message.textContent ?? "";
+}
+
+function isExpired(card: BargainCardSummary) {
+  return Boolean(card.expiresAt && new Date(card.expiresAt).getTime() < Date.now());
 }
 
 function StateBlock({ title }: { title: string }) {

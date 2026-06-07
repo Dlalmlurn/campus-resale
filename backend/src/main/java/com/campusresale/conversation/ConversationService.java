@@ -3,18 +3,30 @@ package com.campusresale.conversation;
 import com.campusresale.conversation.ConversationRequests.CreateBargainRequest;
 import com.campusresale.conversation.ConversationRequests.CreateConversationRequest;
 import com.campusresale.conversation.ConversationRequests.SendMessageRequest;
+import com.campusresale.files.FileKind;
+import com.campusresale.files.FileRepository;
+import com.campusresale.files.StoredFileRecord;
+import com.campusresale.files.VisibilityScope;
 import com.campusresale.goods.GoodsAuditStatus;
 import com.campusresale.goods.GoodsRecord;
 import com.campusresale.goods.GoodsRepository;
 import com.campusresale.goods.GoodsStatus;
+import com.campusresale.notification.NotificationRecord;
+import com.campusresale.notification.NotificationResponse;
 import com.campusresale.notification.NotificationService;
 import com.campusresale.platform.api.ApiExceptions;
+import com.campusresale.platform.audit.AuditLogRepository;
 import com.campusresale.platform.security.CurrentPrincipal;
+import com.campusresale.platform.security.SecurityProperties;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,15 +40,24 @@ public class ConversationService {
     private final ConversationRepository conversationRepository;
     private final GoodsRepository goodsRepository;
     private final NotificationService notificationService;
+    private final FileRepository fileRepository;
+    private final AuditLogRepository auditLogRepository;
+    private final ConversationRealtimeGateway realtimeGateway;
 
     public ConversationService(
             ConversationRepository conversationRepository,
             GoodsRepository goodsRepository,
-            NotificationService notificationService
+            NotificationService notificationService,
+            FileRepository fileRepository,
+            AuditLogRepository auditLogRepository,
+            ConversationRealtimeGateway realtimeGateway
     ) {
         this.conversationRepository = conversationRepository;
         this.goodsRepository = goodsRepository;
         this.notificationService = notificationService;
+        this.fileRepository = fileRepository;
+        this.auditLogRepository = auditLogRepository;
+        this.realtimeGateway = realtimeGateway;
     }
 
     @Transactional
@@ -57,6 +78,7 @@ public class ConversationService {
     }
 
     public List<ConversationSummary> list(CurrentPrincipal principal) {
+        expireVisibleBargains(principal.id());
         return conversationRepository.listByParticipant(principal.id())
                 .stream()
                 .map(ConversationSummary::from)
@@ -65,15 +87,28 @@ public class ConversationService {
 
     public ConversationDetailResponse detail(long conversationId, CurrentPrincipal principal) {
         ConversationRecord conversation = requireParticipant(conversationId, principal);
-        List<MessageResponse> messages = conversationRepository.listMessages(conversation.id())
-                .stream()
-                .map(MessageResponse::from)
-                .toList();
+        expireExpiredBargains(conversation.id());
+        conversationRepository.markMessagesRead(conversation.id(), principal.id(), Instant.now());
+        notificationService.markConversationRead(principal.id(), conversation.id());
+        ConversationRecord viewerConversation = conversationRepository.findByIdForViewer(conversation.id(), principal.id())
+                .orElse(conversation);
+        List<MessageResponse> messages = toMessageResponses(conversationRepository.listMessages(conversation.id()));
         List<BargainCardResponse> cards = conversationRepository.listBargains(conversation.id())
                 .stream()
                 .map(BargainCardResponse::from)
                 .toList();
-        return new ConversationDetailResponse(ConversationSummary.from(conversation), messages, cards);
+        return new ConversationDetailResponse(ConversationSummary.from(viewerConversation), messages, cards);
+    }
+
+    public List<MessageResponse> messagesAfter(long conversationId, long afterId, CurrentPrincipal principal) {
+        if (afterId < 0) {
+            throw ApiExceptions.validation("lastMessageId 不能小于 0", Map.of("field", "lastMessageId"));
+        }
+        ConversationRecord conversation = requireParticipant(conversationId, principal);
+        List<MessageResponse> messages = toMessageResponses(conversationRepository.listMessagesAfterId(conversation.id(), afterId));
+        conversationRepository.markMessagesRead(conversation.id(), principal.id(), Instant.now());
+        notificationService.markConversationRead(principal.id(), conversation.id());
+        return messages;
     }
 
     @Transactional
@@ -86,10 +121,37 @@ public class ConversationService {
         Instant now = Instant.now();
         long messageId = conversationRepository.createTextMessage(conversation.id(), sender.id(), text, now);
         long receiverId = otherParticipant(conversation, sender.id());
-        notificationService.notifyMessageReceived(receiverId, conversation.id(), conversation.goodsTitle());
-        return conversationRepository.findMessageById(messageId)
-                .map(MessageResponse::from)
+        NotificationRecord notification = notificationService.notifyMessageReceived(receiverId, conversation.id(), conversation.goodsTitle());
+        MessageResponse response = conversationRepository.findMessageById(messageId)
+                .map(record -> MessageResponse.from(record, List.of()))
                 .orElseThrow(ApiExceptions::internalError);
+        publishRealtime("MESSAGE_RECEIVED", conversation, response, null, notification, receiverId);
+        return response;
+    }
+
+    @Transactional
+    public MessageResponse sendImage(long conversationId, SendMessageRequest request, CurrentPrincipal sender) {
+        ConversationRecord conversation = requireParticipantForUpdate(conversationId, sender);
+        if (!"NORMAL".equals(conversation.status())) {
+            throw ApiExceptions.conflict("会话当前不可发送图片", Map.of("status", conversation.status()));
+        }
+        List<Long> fileIds = normalizeAttachmentIds(request == null ? null : request.attachmentFileIds());
+        if (fileIds.isEmpty()) {
+            throw ApiExceptions.validation("请选择要发送的图片", Map.of("field", "attachmentFileIds"));
+        }
+        validateMessageImages(fileIds, sender.id());
+        String text = optionalText(request == null ? null : request.textContent(), MAX_MESSAGE_LENGTH, "textContent", "消息内容最多 2000 个字符");
+        Instant now = Instant.now();
+        long messageId = conversationRepository.createImageMessage(conversation.id(), sender.id(), text, now);
+        conversationRepository.createMessageAttachments(messageId, fileIds);
+        fileRepository.attachToBusiness(fileIds, "MESSAGE_ATTACHMENT", messageId);
+        long receiverId = otherParticipant(conversation, sender.id());
+        NotificationRecord notification = notificationService.notifyMessageReceived(receiverId, conversation.id(), conversation.goodsTitle());
+        MessageRecord record = conversationRepository.findMessageById(messageId)
+                .orElseThrow(ApiExceptions::internalError);
+        MessageResponse response = toMessageResponses(List.of(record)).getFirst();
+        publishRealtime("MESSAGE_RECEIVED", conversation, response, null, notification, receiverId);
+        return response;
     }
 
     @Transactional
@@ -116,10 +178,15 @@ public class ConversationService {
         String note = optionalText(request == null ? null : request.note(), MAX_BARGAIN_NOTE_LENGTH, "note", "议价备注最多 240 个字符");
         Instant now = Instant.now();
         long cardId = conversationRepository.createBargainCard(conversation.id(), buyer.id(), amount, note, now, now.plusSeconds(BARGAIN_TTL_SECONDS));
-        notificationService.notifyBargainOffered(conversation.sellerId(), conversation.id(), conversation.goodsTitle());
-        return conversationRepository.findBargainById(cardId)
+        NotificationRecord notification = notificationService.notifyBargainOffered(conversation.sellerId(), conversation.id(), conversation.goodsTitle());
+        BargainCardResponse response = conversationRepository.findBargainById(cardId)
                 .map(BargainCardResponse::from)
                 .orElseThrow(ApiExceptions::internalError);
+        MessageResponse message = conversationRepository.findMessageByCardId(cardId)
+                .map(record -> MessageResponse.from(record, List.of()))
+                .orElse(null);
+        publishRealtime("BARGAIN_OFFERED", conversation, message, response, notification, conversation.sellerId());
+        return response;
     }
 
     @Transactional
@@ -137,11 +204,16 @@ public class ConversationService {
         if (conversationRepository.markBargain(card.id(), "ACCEPTED", seller.id(), now) != 1) {
             throw ApiExceptions.conflict("议价状态已变化，请刷新后重试", Map.of("cardId", card.id()));
         }
-        conversationRepository.createBargainDecisionMessage(conversation.id(), card.id(), "卖家已接受议价", now);
-        notificationService.notifyBargainAccepted(conversation.buyerId(), conversation.id(), conversation.goodsTitle());
-        return conversationRepository.findBargainById(card.id())
+        long messageId = conversationRepository.createBargainDecisionMessageReturningId(conversation.id(), card.id(), "卖家已接受议价", now);
+        NotificationRecord notification = notificationService.notifyBargainAccepted(conversation.buyerId(), conversation.id(), conversation.goodsTitle());
+        BargainCardResponse response = conversationRepository.findBargainById(card.id())
                 .map(BargainCardResponse::from)
                 .orElseThrow(ApiExceptions::internalError);
+        MessageResponse message = conversationRepository.findMessageById(messageId)
+                .map(record -> MessageResponse.from(record, List.of()))
+                .orElse(null);
+        publishRealtime("BARGAIN_ACCEPTED", conversation, message, response, notification, conversation.buyerId());
+        return response;
     }
 
     @Transactional
@@ -156,11 +228,64 @@ public class ConversationService {
         if (conversationRepository.markBargain(card.id(), "REJECTED", seller.id(), now) != 1) {
             throw ApiExceptions.conflict("议价状态已变化，请刷新后重试", Map.of("cardId", card.id()));
         }
-        conversationRepository.createBargainDecisionMessage(conversation.id(), card.id(), "卖家已拒绝议价", now);
-        notificationService.notifyBargainRejected(conversation.buyerId(), conversation.id(), conversation.goodsTitle());
-        return conversationRepository.findBargainById(card.id())
+        long messageId = conversationRepository.createBargainDecisionMessageReturningId(conversation.id(), card.id(), "卖家已拒绝议价", now);
+        NotificationRecord notification = notificationService.notifyBargainRejected(conversation.buyerId(), conversation.id(), conversation.goodsTitle());
+        BargainCardResponse response = conversationRepository.findBargainById(card.id())
                 .map(BargainCardResponse::from)
                 .orElseThrow(ApiExceptions::internalError);
+        MessageResponse message = conversationRepository.findMessageById(messageId)
+                .map(record -> MessageResponse.from(record, List.of()))
+                .orElse(null);
+        publishRealtime("BARGAIN_REJECTED", conversation, message, response, notification, conversation.buyerId());
+        return response;
+    }
+
+    @Transactional
+    public ConversationSummary archive(long conversationId, CurrentPrincipal principal) {
+        requireParticipantForUpdate(conversationId, principal);
+        conversationRepository.archive(conversationId, principal.id(), Instant.now());
+        return conversationRepository.findByIdForViewer(conversationId, principal.id())
+                .map(ConversationSummary::from)
+                .orElseThrow(() -> ApiExceptions.notFound("会话不存在或不可见"));
+    }
+
+    @Transactional
+    public ConversationSummary unarchive(long conversationId, CurrentPrincipal principal) {
+        requireParticipantForUpdate(conversationId, principal);
+        conversationRepository.unarchive(conversationId, principal.id(), Instant.now());
+        return conversationRepository.findByIdForViewer(conversationId, principal.id())
+                .map(ConversationSummary::from)
+                .orElseThrow(() -> ApiExceptions.notFound("会话不存在或不可见"));
+    }
+
+    @Transactional
+    public ConversationSummary block(long conversationId, CurrentPrincipal principal) {
+        requireParticipantForUpdate(conversationId, principal);
+        conversationRepository.block(conversationId, principal.id(), Instant.now());
+        return conversationRepository.findByIdForViewer(conversationId, principal.id())
+                .map(ConversationSummary::from)
+                .orElseThrow(() -> ApiExceptions.notFound("会话不存在或不可见"));
+    }
+
+    public ConversationDetailResponse adminDetail(long conversationId, CurrentPrincipal admin, String reason, String ipAddress) {
+        if (!isAdmin(admin)) {
+            throw ApiExceptions.forbidden("仅管理员可以查看私信内容");
+        }
+        String accessReason = reason == null || reason.isBlank() ? "查看私信内容" : reason.trim();
+        try {
+            ConversationRecord conversation = conversationRepository.findById(conversationId)
+                    .orElseThrow(() -> ApiExceptions.notFound("会话不存在或不可见"));
+            List<MessageResponse> messages = toMessageResponses(conversationRepository.listMessages(conversation.id()));
+            List<BargainCardResponse> cards = conversationRepository.listBargains(conversation.id())
+                    .stream()
+                    .map(BargainCardResponse::from)
+                    .toList();
+            auditLogRepository.recordSensitiveAccess(admin.id(), "PRIVATE_MESSAGE", conversationId, accessReason, "ALLOWED", ipAddress);
+            return new ConversationDetailResponse(ConversationSummary.from(conversation), messages, cards);
+        } catch (RuntimeException exception) {
+            auditLogRepository.recordSensitiveAccess(admin.id(), "PRIVATE_MESSAGE", conversationId, accessReason, "FAILED", ipAddress);
+            throw exception;
+        }
     }
 
     public AcceptedBargainQuote validateAcceptedBargainForOrder(long goodsId, long buyerId, long cardId) {
@@ -212,8 +337,80 @@ public class ConversationService {
             throw ApiExceptions.conflict("议价卡片已处理", Map.of("status", card.actionStatus()));
         }
         if (card.expiresAt() != null && Instant.now().isAfter(card.expiresAt())) {
+            conversationRepository.expireExpiredBargains(card.conversationId(), Instant.now());
             throw ApiExceptions.conflict("议价卡片已过期", Map.of("cardId", card.id()));
         }
+    }
+
+    private List<MessageResponse> toMessageResponses(List<MessageRecord> records) {
+        List<Long> messageIds = records.stream().map(MessageRecord::id).toList();
+        Map<Long, List<MessageAttachmentResponse>> byMessageId = conversationRepository
+                .listAttachmentsByMessageIds(messageIds)
+                .stream()
+                .collect(Collectors.groupingBy(
+                        MessageAttachmentRecord::messageId,
+                        Collectors.mapping(MessageAttachmentResponse::from, Collectors.toList())
+                ));
+        return records.stream()
+                .map(record -> MessageResponse.from(record, byMessageId.getOrDefault(record.id(), List.of())))
+                .toList();
+    }
+
+    private List<Long> normalizeAttachmentIds(Collection<Long> fileIds) {
+        if (fileIds == null || fileIds.isEmpty()) {
+            return List.of();
+        }
+        LinkedHashSet<Long> normalized = fileIds.stream()
+                .filter(id -> id != null && id > 0)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (normalized.size() > 4) {
+            throw ApiExceptions.validation("一次最多发送 4 张图片", Map.of("field", "attachmentFileIds"));
+        }
+        return List.copyOf(normalized);
+    }
+
+    private void validateMessageImages(List<Long> fileIds, long ownerUserId) {
+        List<StoredFileRecord> files = fileRepository.findAllByIds(fileIds);
+        if (files.size() != fileIds.size()) {
+            throw ApiExceptions.validation("私信图片不存在", Map.of("field", "attachmentFileIds"));
+        }
+        for (StoredFileRecord file : files) {
+            if (!Long.valueOf(ownerUserId).equals(file.ownerUserId())
+                    || file.fileKind() != FileKind.MESSAGE_IMAGE
+                    || file.visibilityScope() != VisibilityScope.PARTICIPANTS
+                    || file.businessId() != null) {
+                throw ApiExceptions.validation("私信图片必须由当前用户上传且尚未绑定消息", Map.of("field", "attachmentFileIds"));
+            }
+        }
+    }
+
+    private void publishRealtime(
+            String type,
+            ConversationRecord conversation,
+            MessageResponse message,
+            BargainCardResponse bargainCard,
+            NotificationRecord notification,
+            Long receiverUserId
+    ) {
+        realtimeGateway.publishAfterCommit(ConversationRealtimeEvent.of(
+                type,
+                conversation.id(),
+                message,
+                bargainCard,
+                ConversationSummary.from(conversation),
+                notification == null ? null : NotificationResponse.from(notification),
+                receiverUserId,
+                Set.of(conversation.buyerId(), conversation.sellerId())
+        ));
+    }
+
+    private void expireVisibleBargains(long userId) {
+        conversationRepository.listByParticipant(userId)
+                .forEach(conversation -> expireExpiredBargains(conversation.id()));
+    }
+
+    private void expireExpiredBargains(long conversationId) {
+        conversationRepository.expireExpiredBargains(conversationId, Instant.now());
     }
 
     private long otherParticipant(ConversationRecord conversation, long userId) {
@@ -252,5 +449,12 @@ public class ConversationService {
         } catch (NumberFormatException exception) {
             throw ApiExceptions.validation("金额格式不正确", Map.of("field", field));
         }
+    }
+
+    private boolean isAdmin(CurrentPrincipal principal) {
+        return principal.hasAnyRole(new String[]{
+                SecurityProperties.CONTENT_ADMIN_ROLE,
+                SecurityProperties.SUPER_ADMIN_ROLE
+        });
     }
 }
