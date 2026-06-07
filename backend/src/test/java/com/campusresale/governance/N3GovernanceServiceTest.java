@@ -2,11 +2,14 @@ package com.campusresale.governance;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.campusresale.governance.N3GovernanceRepository.OrderSnapshot;
 import com.campusresale.governance.N3Requests.CreateRefundRequest;
+import com.campusresale.governance.N3Requests.HandleReportRequest;
 import com.campusresale.governance.N3Requests.SubmitReportRequest;
 import com.campusresale.governance.N3Responses.ReportResponse;
 import com.campusresale.governance.N3Responses.UserSummary;
@@ -66,6 +69,54 @@ class N3GovernanceServiceTest {
                 principal
         ))
                 .satisfies(exception -> assertThat(((com.campusresale.platform.api.ApiException) exception).code()).isEqualTo("VALIDATION_FAILED"));
+    }
+
+    @Test
+    void upheldGoodsReportLinksGoodsOrderPenaltyAndCreditEffects() {
+        CurrentPrincipal admin = principal(1L, Set.of("CONTENT_ADMIN"));
+        ReportResponse before = report("PENDING");
+        ReportResponse after = report("UPHELD");
+        when(repository.findReport(88L)).thenReturn(Optional.of(before));
+        when(repository.updateReport(eq(88L), eq(1L), eq("UPHELD"), eq("举报成立，下架商品并限制卖家交易"), any(Instant.class)))
+                .thenReturn(Optional.of(after));
+        when(repository.createPenalty(11L, 88L, null, "TRADE_RESTRICT", "举报成立，下架商品并限制卖家交易", 1L)).thenReturn(6L);
+        when(repository.findPenalty(6L)).thenReturn(Optional.of(new N3Responses.PenaltyResponse(
+                6L,
+                new UserSummary(11L, "小林同学"),
+                88L,
+                null,
+                "TRADE_RESTRICT",
+                "举报成立，下架商品并限制卖家交易",
+                "ACTIVE",
+                1L,
+                null,
+                null,
+                Instant.parse("2026-06-05T10:00:00Z")
+        )));
+
+        service.handleReport(88L, new HandleReportRequest("UPHELD", "举报成立，下架商品并限制卖家交易", 11L, "TRADE_RESTRICT"), admin, "127.0.0.1");
+
+        verify(repository).applyUpheldReportEffects(88L, "GOODS", 10L, 11L, 1L, "举报成立，下架商品并限制卖家交易");
+        verify(repository).insertCreditRecord(11L, "REPORT", 88L, "举报成立，下架商品并限制卖家交易", -20, "平台治理记录", 1L);
+        verify(auditLogRepository).recordOperation(eq(1L), eq("N3_REPORT_HANDLE"), eq("REPORT"), eq(88L), eq(before), eq(after), eq("127.0.0.1"));
+    }
+
+    private ReportResponse report(String status) {
+        return new ReportResponse(
+                88L,
+                new UserSummary(31L, "买家同学"),
+                "GOODS",
+                10L,
+                "FAKE_GOODS",
+                "商品描述不一致",
+                status,
+                "NORMAL",
+                null,
+                null,
+                null,
+                List.of(),
+                Instant.parse("2026-06-05T10:00:00Z")
+        );
     }
 
     private CurrentPrincipal principal(long id, Set<String> roles) {

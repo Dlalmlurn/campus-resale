@@ -45,12 +45,25 @@ class CampusTradeEligibilityCheckerTest {
         assertThat(checker.canTrade(principal)).isTrue();
     }
 
+    @Test
+    void rejectsLockedAccountBeforeCampusEligibilityLookup() {
+        CurrentPrincipal principal = principal("LOCKED", Set.of("REGISTERED_USER", SecurityProperties.VERIFIED_STUDENT_ROLE));
+
+        assertThat(checker.canTrade(principal)).isFalse();
+
+        verifyNoInteractions(campusTradeEligibilityResolver);
+    }
+
     private CurrentPrincipal principal(Set<String> roles) {
+        return principal("ACTIVE", roles);
+    }
+
+    private CurrentPrincipal principal(String accountStatus, Set<String> roles) {
         return new CurrentPrincipal(
                 1L,
                 "student_demo",
                 "Student Demo",
-                "ACTIVE",
+                accountStatus,
                 roles,
                 1L,
                 Instant.now().plusSeconds(60),

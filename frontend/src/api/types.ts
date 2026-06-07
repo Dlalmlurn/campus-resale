@@ -87,6 +87,7 @@ export interface GoodsSummary {
   category: CategorySummary;
   primaryImage?: GoodsImageSummary | null;
   publishedAt?: string | null;
+  recommendationReason?: string | null;
 }
 
 export interface GoodsUpsertRequest {

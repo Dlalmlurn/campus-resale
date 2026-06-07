@@ -28,6 +28,7 @@ import {
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError } from "./api/client";
 import { createConversation } from "./api/conversations";
+import { assistGoods, type GoodsAssistResponse } from "./api/intelligence";
 import {
   createGoodsDraft,
   getAdminGoods,
@@ -315,6 +316,7 @@ export function App() {
         {route.name === "auth" && <AuthPage currentUser={currentUser} onAuthenticated={setCurrentUser} navigate={navigate} notify={notify} />}
         {route.name === "verification" && currentUser && <VerificationPage currentUser={currentUser} onUserChange={setCurrentUser} notify={notify} />}
         {route.name === "seller" && currentUser?.canTrade && <SellerPage catalog={catalog} notify={notify} />}
+        {route.name === "governance" && currentUser && <GovernancePage currentUser={currentUser} notify={notify} />}
         {route.name === "admin" && isAdmin(currentUser) && <AdminPage notify={notify} navigate={navigate} />}
       </main>
     </div>
@@ -376,6 +378,7 @@ function MarketPage(props: {
               </div>
               <h2>{item.title}</h2>
               <p>{item.description}</p>
+              {item.recommendationReason && <p className="recommendation-reason">推荐理由：{item.recommendationReason}</p>}
               <div className="goods-card-footer">
                 <strong>¥{item.listPrice}</strong>
                 <span>{item.seller.nickname}</span>
@@ -696,6 +699,8 @@ function SellerPage(props: { catalog: Catalog; notify: Notify }) {
   const [items, setItems] = useState<GoodsSummary[]>([]);
   const [files, setFiles] = useState<StoredFileSummary[]>([]);
   const [busy, setBusy] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiAdvice, setAiAdvice] = useState<GoodsAssistResponse | null>(null);
   const [form, setForm] = useState<GoodsUpsertRequest>({
     title: "",
     description: "",
@@ -763,6 +768,34 @@ function SellerPage(props: { catalog: Catalog; notify: Notify }) {
     }
   };
 
+  const requestAiAdvice = async () => {
+    setAiBusy(true);
+    try {
+      const advice = await assistGoods({ title: form.title, description: form.description, price: form.listPrice });
+      setAiAdvice(advice);
+      props.notify("success", "AI 发布建议已生成");
+    } catch (error) {
+      props.notify("error", messageOf(error));
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
+  const applyAiAdvice = () => {
+    if (!aiAdvice) return;
+    const matchedCategory = props.catalog.categories.find((item) => item.code === aiAdvice.suggestedCategoryCode);
+    const matchedTagIds = props.catalog.tags
+      .filter((tag) => aiAdvice.suggestedTags.some((name) => tag.name.includes(name) || name.includes(tag.name)))
+      .map((tag) => tag.id);
+    setForm((current) => ({
+      ...current,
+      title: aiAdvice.optimizedTitle,
+      description: aiAdvice.optimizedDescription,
+      categoryId: matchedCategory?.id ?? current.categoryId,
+      tagIds: Array.from(new Set([...current.tagIds, ...matchedTagIds]))
+    }));
+  };
+
   return (
     <section>
       <PageHeading eyebrow="卖家工作台" title="发布商品" text="上传图片并创建草稿，确认后提交管理员审核。" />
@@ -790,6 +823,27 @@ function SellerPage(props: { catalog: Catalog; notify: Notify }) {
           {files.length > 0 && <p className="form-hint">已上传 {files.length} 张图片</p>}
           <button className="primary-button full-width" disabled={busy} type="submit">创建草稿</button>
         </form>
+        <aside className="side-panel seller-assist-panel">
+          <div className="panel-title"><h2>AI 发布辅助</h2></div>
+          <p className="form-hint">根据当前标题和描述生成分类、标签、风险和文案建议。</p>
+          <button className="secondary-button full-width" disabled={aiBusy || busy} type="button" onClick={() => void requestAiAdvice()}>
+            {aiBusy ? "生成中" : "生成优化建议"}
+          </button>
+          {aiAdvice && (
+            <div className="ai-advice">
+              <div><span>优化标题</span><strong>{aiAdvice.optimizedTitle}</strong></div>
+              <p>{aiAdvice.optimizedDescription}</p>
+              <div className="badge-row">
+                <span className="badge neutral">{aiAdvice.suggestedCategoryCode}</span>
+                <span className={`badge ${aiAdvice.riskLevel === "HIGH" ? "danger" : "success"}`}>风险 {aiAdvice.riskLevel}</span>
+              </div>
+              <p className="recommendation-reason">推荐理由：{aiAdvice.recommendationReason}</p>
+              <p className="form-hint">{aiAdvice.riskReasons.join(" / ")}</p>
+              <p className="form-hint">{aiAdvice.auditReminder}</p>
+              <button className="text-button" type="button" onClick={applyAiAdvice}>应用标题和描述</button>
+            </div>
+          )}
+        </aside>
         <aside className="side-panel">
           <div className="panel-title"><h2>我的商品</h2><button className="icon-button subtle" aria-label="刷新商品" type="button" onClick={() => void load()}><RefreshCw size={17} /></button></div>
           {items.length === 0 ? <EmptyBlock title="还没有发布记录" /> : items.map((item) => <div className="seller-item" key={item.id}>
@@ -1052,7 +1106,7 @@ function parseRoute(): Route {
   if (value.startsWith("goods/")) return { name: "goods", id: Number(value.split("/")[1]) };
   if (value.startsWith("conversations/")) return { name: "conversation", id: Number(value.split("/")[1]) };
   if (value.startsWith("orders/")) return { name: "order", id: Number(value.split("/")[1]) };
-  if (["market", "conversations", "orders", "notifications", "auth", "verification", "seller", "admin"].includes(value)) return { name: value as Route["name"] } as Route;
+  if (["market", "conversations", "orders", "notifications", "auth", "verification", "seller", "governance", "admin"].includes(value)) return { name: value as Route["name"] } as Route;
   return { name: "market" };
 }
 

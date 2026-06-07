@@ -26,6 +26,10 @@ public class CampusTradeEligibilityChecker implements TradeEligibilityChecker {
 
     @Override
     public boolean canTrade(CurrentPrincipal principal) {
+        if (!"ACTIVE".equals(principal.accountStatus())) {
+            return false;
+        }
+
         // 先检查角色，能提前拒绝明显不是认证学生的账号，也和商品发布、订单交易规则保持一致。
         if (!principal.hasRole(SecurityProperties.VERIFIED_STUDENT_ROLE)) {
             return false;

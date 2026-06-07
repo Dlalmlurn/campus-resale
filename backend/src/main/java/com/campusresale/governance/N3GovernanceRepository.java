@@ -365,6 +365,111 @@ public class N3GovernanceRepository {
         return findPenalty(penaltyId);
     }
 
+    public void liftActivePenaltiesForReport(long reportId, long adminId, long appealId, Instant now) {
+        jdbcTemplate.update("""
+                        UPDATE penalty_records
+                        SET status = 'LIFTED',
+                            lifted_by_admin_id = ?,
+                            lifted_at = ?
+                        WHERE report_id = ?
+                          AND status = 'ACTIVE'
+                        """,
+                adminId,
+                Timestamp.from(now),
+                reportId
+        );
+        jdbcTemplate.update("""
+                        UPDATE users
+                        SET account_status = 'ACTIVE',
+                            updated_at = now()
+                        WHERE id IN (
+                            SELECT user_id
+                            FROM penalty_records
+                            WHERE report_id = ?
+                              AND penalty_type = 'ACCOUNT_LOCK'
+                        )
+                          AND NOT EXISTS (
+                              SELECT 1
+                              FROM penalty_records p
+                              WHERE p.user_id = users.id
+                                AND p.status = 'ACTIVE'
+                                AND p.penalty_type = 'ACCOUNT_LOCK'
+                          )
+                        """,
+                reportId
+        );
+        jdbcTemplate.update("""
+                        UPDATE reports
+                        SET handling_note = concat(COALESCE(handling_note, ''), E'\n申诉 #', ?, ' 已通过，相关处罚已反向修正。')
+                        WHERE id = ?
+                        """,
+                appealId,
+                reportId
+        );
+    }
+
+    public void applyUpheldReportEffects(long reportId, String targetType, long targetId, Long penaltyUserId, long adminId, String note) {
+        if ("GOODS".equals(targetType)) {
+            jdbcTemplate.update("""
+                            UPDATE goods
+                            SET status = 'OFF_SHELF',
+                                audit_status = 'REJECTED',
+                                updated_at = now()
+                            WHERE id = ?
+                              AND is_deleted = FALSE
+                            """,
+                    targetId
+            );
+            jdbcTemplate.update("""
+                            UPDATE trade_orders
+                            SET status = 'DISPUTE_PROCESSING',
+                                updated_at = now()
+                            WHERE goods_id = ?
+                              AND status IN ('PENDING_SELLER_CONFIRM', 'PENDING_PAYMENT', 'PAID_PENDING_MEETUP', 'COMPLETED_PENDING_SETTLEMENT')
+                            """,
+                    targetId
+            );
+            insertReportStateRecords(reportId, "GOODS", targetId, adminId, note);
+            return;
+        }
+        if ("ORDER".equals(targetType)) {
+            jdbcTemplate.update("""
+                            UPDATE trade_orders
+                            SET status = 'DISPUTE_PROCESSING',
+                                updated_at = now()
+                            WHERE id = ?
+                              AND status IN ('PENDING_SELLER_CONFIRM', 'PENDING_PAYMENT', 'PAID_PENDING_MEETUP', 'COMPLETED_PENDING_SETTLEMENT')
+                            """,
+                    targetId
+            );
+            insertReportStateRecords(reportId, "ORDER", targetId, adminId, note);
+        }
+    }
+
+    private void insertReportStateRecords(long reportId, String targetType, long targetId, long adminId, String note) {
+        String orderFilter = "ORDER".equals(targetType) ? "o.id = ?" : "o.goods_id = ?";
+        jdbcTemplate.update("""
+                        INSERT INTO order_state_records (order_id, from_status, to_status, event_type, operator_admin_id, reason, metadata_json)
+                        SELECT o.id,
+                               NULL,
+                               'DISPUTE_PROCESSING',
+                               'REPORT_UPHELD',
+                               ?,
+                               ?,
+                               jsonb_build_object('reportId', ?, 'targetType', ?)
+                        FROM trade_orders o
+                        WHERE """ + orderFilter + """
+                          AND o.status = 'DISPUTE_PROCESSING'
+                        ON CONFLICT DO NOTHING
+                        """,
+                adminId,
+                note,
+                reportId,
+                targetType,
+                targetId
+        );
+    }
+
     public void upsertFavorite(long userId, long goodsId) {
         jdbcTemplate.update("""
                         INSERT INTO favorites (user_id, goods_id)

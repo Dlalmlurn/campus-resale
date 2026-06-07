@@ -53,7 +53,8 @@ const goods = [
     seller: { id: 12, nickname: "晨风" },
     category: categories[1],
     primaryImage: { id: 102, url: "https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&w=900&q=80" },
-    publishedAt: "2026-05-29T08:20:00"
+    publishedAt: "2026-05-29T08:20:00",
+    recommendationReason: "教材资料匹配你的浏览偏好"
   },
   {
     id: 3,
@@ -170,8 +171,8 @@ const penalties = [{
   user: { id: 12, nickname: "晨风" },
   reportId: 39,
   appealId: null,
-  penaltyType: "WARNING",
-  reason: "商品描述不完整，已提醒整改。",
+  penaltyType: "TRADE_RESTRICT",
+  reason: "举报成立后暂时限制交易，等待整改。",
   status: "ACTIVE",
   createdByAdminId: 1,
   liftedByAdminId: null,
@@ -677,6 +678,21 @@ const server = http.createServer(async (request, response) => {
     return send(response, 200, governanceOverview());
   }
 
+  if (request.method === "POST" && path === "/api/intelligence/goods-assist") {
+    if (!currentUser) return send(response, 401, { code: "AUTH_REQUIRED", message: "请先登录" });
+    return send(response, 200, {
+      requestId: 501,
+      optimizedTitle: "数据库课程复习资料",
+      optimizedDescription: "适合数据库原理期末复习，包含重点笔记，建议补充版本和新旧程度。",
+      suggestedCategoryCode: "BOOKS",
+      suggestedTags: ["教材资料", "期末复习"],
+      riskLevel: "LOW",
+      riskReasons: ["未发现明显禁售词"],
+      recommendationReason: "根据标题和描述判断更适合教材资料分类",
+      auditReminder: "AI 仅提供辅助建议，不会自动审核、下架或处罚。"
+    });
+  }
+
   if (request.method === "POST" && path === "/api/n3/reports") {
     if (!currentUser) return send(response, 401, { code: "AUTH_REQUIRED", message: "请先登录" });
     const body = await readJson(request);
@@ -869,7 +885,15 @@ function creditSummary() {
     publicTags: ["有完成交易记录", "暂无有效处罚"],
     internalScore: 82,
     internalLevel: "B",
-    recentRecords: [],
+    recentRecords: [{
+      id: 1,
+      sourceType: "ORDER",
+      sourceId: 77,
+      reason: "完成交易",
+      internalDeltaValue: 2,
+      publicLabel: "履约记录",
+      createdAt: new Date().toISOString()
+    }],
     updatedAt: new Date().toISOString()
   };
 }
