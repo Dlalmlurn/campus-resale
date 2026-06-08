@@ -1,4 +1,4 @@
-// 文件功能：提供 N3 治理与信用中心页面，聚合举报、申诉、退款记录、收藏关注、管理员待办和信用画像。
+// 文件功能：提供治理与信用中心页面，聚合举报、申诉、退款记录、收藏关注、管理员待办和信用画像。
 import { AlertTriangle, RefreshCw, ShieldAlert } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -103,13 +103,12 @@ export function GovernancePage(props: { currentUser: CurrentUser; notify: Notify
   };
 
   const adminQueue = overview?.adminQueue;
-  const scrollToSection = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   return (
     <section>
       <section className="page-heading">
         <div>
-          <p className="eyebrow">N3 平台治理</p>
+          <p className="eyebrow">平台治理</p>
           <h1>治理与信用中心</h1>
           <p>集中查看举报与收藏关注记录、提交申诉与退款、查看信用画像，管理员账号可直接处理待办。</p>
         </div>
@@ -118,13 +117,6 @@ export function GovernancePage(props: { currentUser: CurrentUser; notify: Notify
 
       {!overview ? <LoadingBlock /> : (
         <>
-          <section className="governance-tabs" aria-label="治理工作台入口">
-            <button type="button" onClick={() => scrollToSection("governance-report-section")}>举报处理</button>
-            <button type="button" onClick={() => scrollToSection("governance-appeal-section")}>申诉复核</button>
-            <button type="button" onClick={() => scrollToSection("governance-admin-section")}>处罚处理</button>
-            <button type="button" onClick={() => scrollToSection("governance-credit-section")}>信用概览</button>
-          </section>
-
           <section id="governance-credit-section" className="section-title-row">
             <div>
               <p className="eyebrow">信用聚合</p>
@@ -186,8 +178,8 @@ export function GovernancePage(props: { currentUser: CurrentUser; notify: Notify
           </section>
 
           {adminQueue && (
-            <section id="governance-admin-section" className="admin-n3">
-              <div className="panel-title"><h2><AlertTriangle size={18} /> 管理员待办</h2><span className="badge neutral">N3 A/B/C</span></div>
+            <section id="governance-admin-section" className="admin-governance">
+              <div className="panel-title"><h2><AlertTriangle size={18} /> 管理员待办</h2><span className="badge neutral">治理队列</span></div>
               <div className="governance-board">
                 <RecordColumn title="举报处理" empty="没有待处理举报">
                   {adminQueue.pendingReports.map((item) => (

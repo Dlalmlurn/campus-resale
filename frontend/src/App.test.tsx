@@ -202,7 +202,7 @@ describe("App", () => {
     await waitFor(() => expect(screen.getByText("0 条未读")).toBeInTheDocument());
   });
 
-  it("opens the polished N3 governance workspace from the main navigation", async () => {
+  it("opens the governance workspace from the main navigation", async () => {
     stubBackend(contentAdmin);
     render(<App />);
 
@@ -210,10 +210,11 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "治理" }));
 
     await waitFor(() => expect(screen.getByText("治理与信用中心")).toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "举报处理" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "申诉复核" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "处罚处理" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "举报处理" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "申诉复核" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "处罚处理" })).not.toBeInTheDocument();
     expect(screen.getByText("信用画像")).toBeInTheDocument();
+    expect(screen.getByText("治理队列")).toBeInTheDocument();
     expect(screen.getByText("商品描述与实际成色不一致，需要管理员核实。")).toBeInTheDocument();
   });
 
