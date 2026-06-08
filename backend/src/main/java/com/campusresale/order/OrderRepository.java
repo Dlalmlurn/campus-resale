@@ -953,7 +953,7 @@ public class OrderRepository {
                             modified_until,
                             visible_at
                         )
-                        VALUES (?, ?, ?, ?, ?, 'VISIBLE', ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, 'SUBMITTED', ?, ?, NULL)
                         RETURNING id
                         """,
                 Long.class,
@@ -963,8 +963,7 @@ public class OrderRepository {
                 rating,
                 content,
                 Timestamp.from(now),
-                Timestamp.from(now.plusSeconds(72 * 60 * 60)),
-                Timestamp.from(now)
+                Timestamp.from(now.plusSeconds(72 * 60 * 60))
         );
         return reviewId;
     }
@@ -983,6 +982,32 @@ public class OrderRepository {
                 reviewerId
         );
         return Boolean.TRUE.equals(exists);
+    }
+
+    public boolean orderHasBothReviews(long orderId) {
+        Integer count = jdbcTemplate.queryForObject("""
+                        SELECT COUNT(DISTINCT reviewer_id)::int
+                        FROM reviews
+                        WHERE order_id = ?
+                          AND status IN ('SUBMITTED', 'VISIBLE')
+                        """,
+                Integer.class,
+                orderId
+        );
+        return count != null && count >= 2;
+    }
+
+    public int markOrderReviewsVisible(long orderId, Instant visibleAt) {
+        return jdbcTemplate.update("""
+                        UPDATE reviews
+                        SET status = 'VISIBLE',
+                            visible_at = COALESCE(visible_at, ?)
+                        WHERE order_id = ?
+                          AND status = 'SUBMITTED'
+                        """,
+                Timestamp.from(visibleAt),
+                orderId
+        );
     }
 
     public Optional<ReviewRecord> findReviewById(long reviewId) {

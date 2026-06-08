@@ -590,12 +590,21 @@ public class N3GovernanceRepository {
                 userId
         );
         Integer negative = jdbcTemplate.queryForObject("""
-                        SELECT COUNT(*)::int
-                        FROM penalty_records
-                        WHERE user_id = ?
-                          AND status = 'ACTIVE'
+                        SELECT (
+                            SELECT COUNT(*)::int
+                            FROM penalty_records
+                            WHERE user_id = ?
+                              AND status = 'ACTIVE'
+                        ) + (
+                            SELECT COUNT(*)::int
+                            FROM reviews
+                            WHERE reviewed_user_id = ?
+                              AND rating <= 2
+                              AND status IN ('SUBMITTED', 'VISIBLE')
+                        )
                         """,
                 Integer.class,
+                userId,
                 userId
         );
         int fulfillmentCount = fulfilled == null ? 0 : fulfilled;
@@ -612,6 +621,8 @@ public class N3GovernanceRepository {
         }
         if (negativeEventCount == 0) {
             tags.add("暂无有效处罚");
+        } else {
+            tags.add("有待改善记录");
         }
         if (tags.isEmpty()) {
             tags.add("新用户信用样本积累中");

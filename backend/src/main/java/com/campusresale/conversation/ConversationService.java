@@ -318,6 +318,27 @@ public class ConversationService {
         return new AcceptedBargainQuote(conversation.id(), card.id(), card.amount());
     }
 
+    public void notifyReviewSubmitted(Long conversationId, long reviewerId, long receiverId, long orderId) {
+        if (conversationId == null) {
+            return;
+        }
+        conversationRepository.findById(conversationId).ifPresent(conversation -> {
+            if ((conversation.buyerId() != reviewerId && conversation.sellerId() != reviewerId)
+                    || (conversation.buyerId() != receiverId && conversation.sellerId() != receiverId)) {
+                return;
+            }
+            Instant now = Instant.now();
+            String text = "对方已完成评价，点击查看订单 #" + orderId + " 的评价。";
+            long messageId = conversationRepository.createSystemNoticeMessage(conversation.id(), text, orderId, now);
+            conversationRepository.restoreVisibilityForParticipant(conversation.id(), receiverId, now);
+            NotificationRecord notification = notificationService.notifyReviewSubmitted(receiverId, orderId, conversation.goodsTitle());
+            MessageResponse message = conversationRepository.findMessageById(messageId)
+                    .map(record -> MessageResponse.from(record, List.of()))
+                    .orElse(null);
+            publishRealtime("REVIEW_SUBMITTED", conversation, message, null, notification, receiverId);
+        });
+    }
+
     private ConversationRecord requireParticipant(long conversationId, CurrentPrincipal principal) {
         ConversationRecord conversation = conversationRepository.findByIdForViewer(conversationId, principal.id())
                 .orElseThrow(() -> ApiExceptions.notFound("会话不存在或不可见"));

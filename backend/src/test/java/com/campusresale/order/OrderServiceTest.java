@@ -18,6 +18,7 @@ import com.campusresale.goods.GoodsAuditStatus;
 import com.campusresale.goods.GoodsRecord;
 import com.campusresale.goods.GoodsRepository;
 import com.campusresale.goods.GoodsStatus;
+import com.campusresale.governance.N3GovernanceRepository;
 import com.campusresale.notification.NotificationService;
 import com.campusresale.order.OrderRequests.CreateOrderRequest;
 import com.campusresale.order.OrderRequests.ReviewRequest;
@@ -41,6 +42,7 @@ class OrderServiceTest {
     private final FileService fileService = org.mockito.Mockito.mock(FileService.class);
     private final FileRepository fileRepository = org.mockito.Mockito.mock(FileRepository.class);
     private final AuditLogRepository auditLogRepository = org.mockito.Mockito.mock(AuditLogRepository.class);
+    private final N3GovernanceRepository governanceRepository = org.mockito.Mockito.mock(N3GovernanceRepository.class);
     private final OrderService service = new OrderService(
             orderRepository,
             goodsRepository,
@@ -49,7 +51,8 @@ class OrderServiceTest {
             paymentProvider,
             fileService,
             fileRepository,
-            auditLogRepository
+            auditLogRepository,
+            governanceRepository
     );
 
     @Test
@@ -206,16 +209,46 @@ class OrderServiceTest {
 
     @Test
     void createReviewRequiresCompletedOrderAndSingleReviewPerParticipant() {
-        when(orderRepository.findOrderByIdForUpdate(500L)).thenReturn(Optional.of(order(TradeOrderStatus.COMPLETED)));
+        when(orderRepository.findOrderByIdForUpdate(500L)).thenReturn(Optional.of(order(TradeOrderStatus.COMPLETED_PENDING_SETTLEMENT)));
         when(orderRepository.reviewExists(500L, 2L)).thenReturn(false);
         when(orderRepository.createReview(eq(500L), eq(2L), eq(1L), eq(5), eq("交易顺利"), any()))
                 .thenReturn(800L);
+        when(orderRepository.orderHasBothReviews(500L)).thenReturn(false);
         when(orderRepository.findReviewById(800L)).thenReturn(Optional.of(review()));
 
         ReviewResponse response = service.createReview(500L, new ReviewRequest(5, "交易顺利"), principal(2L));
 
         assertThat(response.reviewedUserId()).isEqualTo(1L);
         assertThat(response.rating()).isEqualTo(5);
+        verify(governanceRepository).insertCreditRecord(1L, "REVIEW", 800L, "收到 4 星及以上交易好评", 3, "收到好评", null);
+        verify(conversationService).notifyReviewSubmitted(20L, 2L, 1L, 500L);
+    }
+
+    @Test
+    void secondReviewMakesBothReviewsVisible() {
+        when(orderRepository.findOrderByIdForUpdate(500L)).thenReturn(Optional.of(order(TradeOrderStatus.COMPLETED)));
+        when(orderRepository.reviewExists(500L, 1L)).thenReturn(false);
+        when(orderRepository.createReview(eq(500L), eq(1L), eq(2L), eq(2), eq("迟到较久"), any()))
+                .thenReturn(801L);
+        when(orderRepository.orderHasBothReviews(500L)).thenReturn(true);
+        when(orderRepository.findReviewById(801L)).thenReturn(Optional.of(new ReviewRecord(
+                801L,
+                500L,
+                1L,
+                2L,
+                2,
+                "迟到较久",
+                ReviewStatus.VISIBLE,
+                Instant.parse("2026-06-01T02:00:00Z"),
+                Instant.parse("2026-06-04T02:00:00Z"),
+                Instant.parse("2026-06-01T02:00:00Z")
+        )));
+
+        ReviewResponse response = service.createReview(500L, new ReviewRequest(2, "迟到较久"), principal(1L));
+
+        assertThat(response.reviewedUserId()).isEqualTo(2L);
+        verify(orderRepository).markOrderReviewsVisible(eq(500L), any());
+        verify(governanceRepository).insertCreditRecord(2L, "REVIEW", 801L, "收到 2 星及以下交易评价", -3, "收到低分评价", null);
     }
 
     @Test
@@ -263,7 +296,7 @@ class OrderServiceTest {
                 100L,
                 "九成新显示器",
                 10L,
-                null,
+                20L,
                 null,
                 2L,
                 "买家",

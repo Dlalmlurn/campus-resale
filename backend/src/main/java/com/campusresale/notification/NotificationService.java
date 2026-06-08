@@ -167,6 +167,18 @@ public class NotificationService {
         );
     }
 
+    public NotificationRecord notifyReviewSubmitted(long receiverId, long orderId, String goodsTitle) {
+        return create(
+                receiverId,
+                NotificationType.REVIEW_SUBMITTED,
+                "对方已完成评价",
+                "「" + displayGoodsTitle(goodsTitle) + "」的交易评价有更新，可进入订单详情查看。",
+                "ORDER",
+                orderId,
+                "order:" + orderId + ":review-submitted:receiver:" + receiverId
+        );
+    }
+
     public NotificationRecord notifySettlementStatusChanged(long sellerId, long settlementId, String status) {
         return create(
                 sellerId,

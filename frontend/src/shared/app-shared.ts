@@ -127,6 +127,7 @@ export function notificationTypeLabel(value: string) {
     PAYMENT_ESCROWED: "支付托管",
     COMPLETION_REQUESTED: "完成确认",
     ORDER_COMPLETED: "订单完成",
+    REVIEW_SUBMITTED: "评价更新",
     SETTLEMENT_STATUS_CHANGED: "结算状态",
     MESSAGE_RECEIVED: "私信消息",
     BARGAIN_OFFERED: "收到议价",

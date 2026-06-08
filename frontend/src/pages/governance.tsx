@@ -1,8 +1,7 @@
-// 文件功能：提供 N3 治理与信用中心页面，聚合举报、申诉、退款、收藏关注、管理员待办和信用画像。
-import { AlertTriangle, RefreshCw, RotateCcw, ShieldAlert } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+// 文件功能：提供 N3 治理与信用中心页面，聚合举报、申诉、退款记录、收藏关注、管理员待办和信用画像。
+import { AlertTriangle, RefreshCw, ShieldAlert } from "lucide-react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
-  createRefund,
   decideRefund,
   getGovernanceOverview,
   GovernanceOverview,
@@ -49,7 +48,6 @@ export function GovernancePage(props: { currentUser: CurrentUser; notify: Notify
   const [overview, setOverview] = useState<GovernanceOverview | null>(null);
   const [busy, setBusy] = useState(false);
   const [appealForm, setAppealForm] = useState({ reportId: "", description: "" });
-  const [refundForm, setRefundForm] = useState({ orderId: "", refundType: "FULL", amount: "", reason: "" });
   const [appealEvidenceIds, setAppealEvidenceIds] = useState<number[]>([]);
 
   const load = useCallback(async () => {
@@ -61,6 +59,14 @@ export function GovernancePage(props: { currentUser: CurrentUser; notify: Notify
   }, [props]);
 
   useEffect(() => { void load(); }, [load]);
+
+  const appealableReports = useMemo(() => overview?.reports ?? [], [overview?.reports]);
+
+  useEffect(() => {
+    if (!appealForm.reportId && appealableReports.length > 0) {
+      setAppealForm((current) => ({ ...current, reportId: String(appealableReports[0].id) }));
+    }
+  }, [appealForm.reportId, appealableReports]);
 
   const run = async (task: () => Promise<unknown>, success: string) => {
     setBusy(true);
@@ -77,6 +83,10 @@ export function GovernancePage(props: { currentUser: CurrentUser; notify: Notify
 
   const onAppeal = (event: FormEvent) => {
     event.preventDefault();
+    if (!appealForm.reportId) {
+      props.notify("error", "请先选择要申诉的举报记录");
+      return;
+    }
     void run(() => submitAppeal({
       reportId: Number(appealForm.reportId),
       description: appealForm.description,
@@ -90,16 +100,6 @@ export function GovernancePage(props: { currentUser: CurrentUser; notify: Notify
       const uploaded = await uploadFile(file, "APPEAL_EVIDENCE");
       setAppealEvidenceIds((current) => [...current, uploaded.id]);
     }, "证据文件已上传");
-  };
-
-  const onRefund = (event: FormEvent) => {
-    event.preventDefault();
-    void run(() => createRefund({
-      orderId: Number(refundForm.orderId),
-      refundType: refundForm.refundType,
-      amount: refundForm.amount,
-      reason: refundForm.reason
-    }), "退款申请已提交");
   };
 
   const adminQueue = overview?.adminQueue;
@@ -136,23 +136,24 @@ export function GovernancePage(props: { currentUser: CurrentUser; notify: Notify
             <Metric title="信用等级" value={overview.credit.internalLevel} text={`${overview.credit.internalScore} 分`} />
             <Metric title="完成交易" value={overview.credit.fulfillmentCount} text="含待结算完成单" />
             <Metric title="好评记录" value={overview.credit.positiveReviewCount} text="4 星及以上" />
-            <Metric title="有效处罚" value={overview.credit.negativeEventCount} text={overview.credit.publicTags.join(" / ")} />
+            <Metric title="负面记录" value={overview.credit.negativeEventCount} text={overview.credit.publicTags.join(" / ")} />
           </section>
           <section className="credit-rule-panel" aria-label="信用评分公式">
             <strong>评分口径</strong>
-            <p>基准 80 分，完成交易每笔 +2，4 星及以上好评每条 +3，有效处罚每条 -15，最终限制在 0 到 100 分；A 为 90 分及以上，B 为 75 到 89 分，C 为 60 到 74 分，D 为 60 分以下。</p>
+            <p>基准 80 分，完成交易每笔 +2，4 星及以上好评每条 +3，有效处罚或 2 星及以下评价每条 -15，最终限制在 0 到 100 分；A 为 90 分及以上，B 为 75 到 89 分，C 为 60 到 74 分，D 为 60 分以下。</p>
           </section>
 
           <div className="governance-layout">
-            <section className="form-panel governance-entry-note">
-              <div className="panel-title"><h2><ShieldAlert size={17} /> 举报入口已统一</h2></div>
-              <p className="form-hint">举报、收藏、关注请在对应的商品卡片、商品详情、订单或消息页内直接操作；本页只用于查看记录、提交申诉/退款以及管理员处理待办。</p>
-            </section>
-
             <form id="governance-appeal-section" className="form-panel" onSubmit={onAppeal}>
               <div className="panel-title"><h2><ShieldAlert size={17} /> 提交申诉</h2></div>
-              <FormField label="关联举报 ID">
-                <input required min="1" type="number" value={appealForm.reportId} onChange={(event) => setAppealForm({ ...appealForm, reportId: event.target.value })} />
+              <FormField label="关联举报记录">
+                <select required value={appealForm.reportId} onChange={(event) => setAppealForm({ ...appealForm, reportId: event.target.value })}>
+                  {appealableReports.length === 0 ? <option value="">暂无可选举报记录</option> : appealableReports.map((item) => (
+                    <option value={item.id} key={item.id}>
+                      #{item.id} · {targetLabel(item.targetType)} {item.targetId} · {reportStatusLabels[item.status] ?? item.status}
+                    </option>
+                  ))}
+                </select>
               </FormField>
               <FormField label="申诉说明">
                 <textarea required rows={3} value={appealForm.description} onChange={(event) => setAppealForm({ ...appealForm, description: event.target.value })} />
@@ -163,25 +164,8 @@ export function GovernancePage(props: { currentUser: CurrentUser; notify: Notify
                 <input accept="image/jpeg,image/png,image/webp" type="file" onChange={(event) => void uploadAppealEvidence(event.target.files?.[0])} />
               </label>
               {appealEvidenceIds.length > 0 && <p className="form-hint">已关联证据 #{appealEvidenceIds.join(", #")}</p>}
-              <button className="primary-button full-width" disabled={busy} type="submit">提交申诉</button>
-            </form>
-
-            <form id="governance-refund-section" className="form-panel" onSubmit={onRefund}>
-              <div className="panel-title"><h2><RotateCcw size={17} /> 申请退款</h2></div>
-              <div className="form-grid">
-                <FormField label="订单 ID"><input required min="1" type="number" value={refundForm.orderId} onChange={(event) => setRefundForm({ ...refundForm, orderId: event.target.value })} /></FormField>
-                <FormField label="退款金额"><input required min="0.01" step="0.01" type="number" value={refundForm.amount} onChange={(event) => setRefundForm({ ...refundForm, amount: event.target.value })} /></FormField>
-              </div>
-              <FormField label="退款类型">
-                <select value={refundForm.refundType} onChange={(event) => setRefundForm({ ...refundForm, refundType: event.target.value })}>
-                  <option value="FULL">全额</option>
-                  <option value="PARTIAL">部分</option>
-                </select>
-              </FormField>
-              <FormField label="退款原因">
-                <textarea required rows={3} value={refundForm.reason} onChange={(event) => setRefundForm({ ...refundForm, reason: event.target.value })} />
-              </FormField>
-              <button className="primary-button full-width" disabled={busy} type="submit">提交退款申请</button>
+              <button className="primary-button full-width" disabled={busy || appealableReports.length === 0} type="submit">提交申诉</button>
+              {appealableReports.length === 0 && <p className="form-hint">暂无举报记录时不能发起申诉；退款请在对应订单详情页申请。</p>}
             </form>
           </div>
 

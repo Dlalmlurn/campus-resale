@@ -176,7 +176,10 @@ export function OrderDetailPage(props: {
         clearStoredCompletion(result.id);
         setCompletion(null);
       }
-      if ("rating" in result) setReviews((current) => [result, ...current]);
+      if ("rating" in result) {
+        setReviews((current) => [result, ...current.filter((item) => item.id !== result.id)]);
+        await load();
+      }
       if ("refundNo" in result) {
         setRefunds((current) => [result, ...current]);
         await load();
@@ -193,7 +196,8 @@ export function OrderDetailPage(props: {
 
   const isBuyer = order.buyer.id === props.currentUser.id;
   const isSeller = order.seller.id === props.currentUser.id;
-  const canReview = isBuyer && ["COMPLETED_PENDING_SETTLEMENT", "COMPLETED"].includes(order.status) && reviews.length === 0;
+  const myReview = reviews.find((review) => review.reviewerId === props.currentUser.id);
+  const canReview = (isBuyer || isSeller) && ["COMPLETED_PENDING_SETTLEMENT", "COMPLETED"].includes(order.status) && !myReview;
   const canRefund = ["PAID_PENDING_MEETUP", "COMPLETED_PENDING_SETTLEMENT"].includes(order.status) && (isBuyer || isSeller);
 
   return (
@@ -254,7 +258,7 @@ export function OrderDetailPage(props: {
             />
           )}
           {canReview && <ReviewForm busy={busy} onSubmit={(rating, content) => action(() => createReview(order.id, rating, content), "评价已提交")} />}
-          {reviews.length > 0 && <div className="review-summary"><Star size={17} /><span>已评价：{reviews[0].rating} 星 · {reviews[0].content}</span></div>}
+          {reviews.length > 0 && <ReviewList reviews={reviews} currentUser={props.currentUser} order={order} />}
         </aside>
       </div>
     </section>
@@ -416,6 +420,30 @@ function ReviewForm(props: { busy: boolean; onSubmit: (rating: number, content: 
       <button className="primary-button full-width" disabled={props.busy} type="submit">提交评价</button>
     </form>
   );
+}
+
+function ReviewList(props: { reviews: ReviewSummary[]; currentUser: CurrentUser; order: OrderSummary }) {
+  return (
+    <div className="review-stack" aria-label="订单评价">
+      {props.reviews.map((review) => {
+        const reviewerName = participantName(props.order, review.reviewerId, props.currentUser.id);
+        const reviewedName = participantName(props.order, review.reviewedUserId, props.currentUser.id);
+        return (
+          <div className="review-summary" key={review.id}>
+            <Star size={17} />
+            <span>{reviewerName} 评价 {reviewedName}：{review.rating} 星 · {review.content || "未填写评价内容"} · {review.status === "VISIBLE" ? "已公开" : "待双方评价"}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function participantName(order: OrderSummary, userId: number, currentUserId: number) {
+  if (userId === currentUserId) return "我";
+  if (userId === order.buyer.id) return order.buyer.nickname;
+  if (userId === order.seller.id) return order.seller.nickname;
+  return `用户 ${userId}`;
 }
 
 export function OrderStatusBadge({ status }: { status: string }) {

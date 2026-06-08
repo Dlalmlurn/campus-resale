@@ -345,7 +345,7 @@ export function ConversationDetailPage(props: {
               return (
                 <div className={`message-bubble ${mine ? "mine" : ""}`} key={item.id}>
                   <small>{item.sender?.nickname ?? "系统"} · {formatDate(item.sentAt)}</small>
-                  {card ? <BargainCard card={card} isSeller={Boolean(isSeller)} busy={busy} onAccept={() => void decide(card.id, "accept")} onReject={() => void decide(card.id, "reject")} /> : <MessageBody item={item} />}
+                  {card ? <BargainCard card={card} isSeller={Boolean(isSeller)} busy={busy} onAccept={() => void decide(card.id, "accept")} onReject={() => void decide(card.id, "reject")} /> : <MessageBody item={item} onOpenOrder={props.onOpenOrder} />}
                 </div>
               );
             })}
@@ -397,10 +397,12 @@ export function ConversationDetailPage(props: {
   );
 }
 
-function MessageBody({ item }: { item: MessageSummary }) {
+function MessageBody({ item, onOpenOrder }: { item: MessageSummary; onOpenOrder: (id: number) => void }) {
+  const reviewOrderId = item.messageType === "SYSTEM_CARD" ? reviewOrderIdFromText(item.textContent) : null;
   return (
     <>
       {item.textContent && <p>{item.textContent}</p>}
+      {reviewOrderId && <button className="secondary-button compact" type="button" onClick={() => onOpenOrder(reviewOrderId)}>查看评价</button>}
       {item.attachments.length > 0 && (
         <div className="message-attachments">
           {item.attachments.map((attachment) => (
@@ -410,6 +412,11 @@ function MessageBody({ item }: { item: MessageSummary }) {
       )}
     </>
   );
+}
+
+function reviewOrderIdFromText(text?: string | null) {
+  const match = text?.match(/订单 #(\d+)/);
+  return match ? Number(match[1]) : null;
 }
 
 function BargainCard(props: {

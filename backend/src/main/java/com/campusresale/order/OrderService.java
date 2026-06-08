@@ -8,6 +8,7 @@ import com.campusresale.goods.GoodsAuditStatus;
 import com.campusresale.goods.GoodsRecord;
 import com.campusresale.goods.GoodsRepository;
 import com.campusresale.goods.GoodsStatus;
+import com.campusresale.governance.N3GovernanceRepository;
 import com.campusresale.notification.NotificationService;
 import com.campusresale.notification.NotificationType;
 import com.campusresale.order.OrderRepository.OrderWriteData;
@@ -54,6 +55,7 @@ public class OrderService {
     private final FileService fileService;
     private final FileRepository fileRepository;
     private final AuditLogRepository auditLogRepository;
+    private final N3GovernanceRepository governanceRepository;
 
     public OrderService(
             OrderRepository orderRepository,
@@ -63,7 +65,8 @@ public class OrderService {
             PaymentProvider paymentProvider,
             FileService fileService,
             FileRepository fileRepository,
-            AuditLogRepository auditLogRepository
+            AuditLogRepository auditLogRepository,
+            N3GovernanceRepository governanceRepository
     ) {
         this.orderRepository = orderRepository;
         this.goodsRepository = goodsRepository;
@@ -73,6 +76,7 @@ public class OrderService {
         this.fileService = fileService;
         this.fileRepository = fileRepository;
         this.auditLogRepository = auditLogRepository;
+        this.governanceRepository = governanceRepository;
     }
 
     @Transactional
@@ -600,7 +604,9 @@ public class OrderService {
     public ReviewResponse createReview(long orderId, ReviewRequest request, CurrentPrincipal principal) {
         TradeOrderRecord order = lockedOrder(orderId);
         requireParticipant(order, principal);
-        requireStatus(order, TradeOrderStatus.COMPLETED, "订单完成后才能评价");
+        if (order.status() != TradeOrderStatus.COMPLETED_PENDING_SETTLEMENT && order.status() != TradeOrderStatus.COMPLETED) {
+            throw ApiExceptions.conflict("订单完成后才能评价", Map.of("status", order.status().name()));
+        }
         if (request == null) {
             throw ApiExceptions.validation("请填写评价内容", Map.of("body", "required"));
         }
@@ -618,6 +624,15 @@ public class OrderService {
                 content,
                 Instant.now()
         );
+        if (orderRepository.orderHasBothReviews(order.id())) {
+            orderRepository.markOrderReviewsVisible(order.id(), Instant.now());
+        }
+        recordReviewCredit(reviewId, reviewedUserId, rating);
+        if (order.conversationId() == null) {
+            notificationService.notifyReviewSubmitted(reviewedUserId, order.id(), order.goodsTitle());
+        } else {
+            conversationService.notifyReviewSubmitted(order.conversationId(), principal.id(), reviewedUserId, order.id());
+        }
         return orderRepository.findReviewById(reviewId)
                 .map(ReviewResponse::from)
                 .orElseThrow(ApiExceptions::internalError);
@@ -640,6 +655,16 @@ public class OrderService {
                 .stream()
                 .map(ReviewResponse::from)
                 .toList();
+    }
+
+    private void recordReviewCredit(long reviewId, long reviewedUserId, int rating) {
+        if (rating >= 4) {
+            governanceRepository.insertCreditRecord(reviewedUserId, "REVIEW", reviewId, "收到 4 星及以上交易好评", 3, "收到好评", null);
+        } else if (rating <= 2) {
+            governanceRepository.insertCreditRecord(reviewedUserId, "REVIEW", reviewId, "收到 2 星及以下交易评价", -3, "收到低分评价", null);
+        } else {
+            governanceRepository.insertCreditRecord(reviewedUserId, "REVIEW", reviewId, "收到中性交易评价", 0, "收到评价", null);
+        }
     }
 
     private TradeOrderRecord lockedOrder(long orderId) {

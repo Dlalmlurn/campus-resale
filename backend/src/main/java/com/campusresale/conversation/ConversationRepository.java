@@ -363,6 +363,29 @@ public class ConversationRepository {
         return messageId;
     }
 
+    public long createSystemNoticeMessage(long conversationId, String text, long orderId, Instant now) {
+        Long cardId = jdbcTemplate.queryForObject("""
+                        INSERT INTO system_message_cards (
+                            conversation_id,
+                            card_type,
+                            payload_json,
+                            action_status,
+                            created_by_system,
+                            created_at
+                        )
+                        VALUES (?, 'SYSTEM_NOTICE', jsonb_build_object('orderId', ?), 'PENDING', TRUE, ?)
+                        RETURNING id
+                        """,
+                Long.class,
+                conversationId,
+                orderId,
+                Timestamp.from(now)
+        );
+        long messageId = createSystemCardMessage(conversationId, cardId == null ? 0 : cardId, text, now);
+        updateLastMessage(conversationId, messageId, now);
+        return messageId;
+    }
+
     public List<MessageRecord> listMessages(long conversationId) {
         return jdbcTemplate.query(MESSAGE_SELECT + """
                         WHERE m.conversation_id = ?
