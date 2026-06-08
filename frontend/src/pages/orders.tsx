@@ -1,3 +1,4 @@
+// 文件功能：提供订单列表与订单详情页，承载支付、完成确认、退款、双方评价和订单举报入口。
 import { CreditCard, FileUp, MessageSquareText, PackageCheck, RefreshCw, Star, XCircle } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {

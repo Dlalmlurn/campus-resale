@@ -1,3 +1,4 @@
+// 文件功能：定义站内通知事件类型，需与 Flyway 中 notifications.type 的 CHECK 约束保持一致。
 package com.campusresale.notification;
 
 public enum NotificationType {

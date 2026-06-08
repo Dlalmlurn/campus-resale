@@ -1,3 +1,4 @@
+// 文件功能：文件业务服务，负责上传校验、对象存储写入、可见性判定、脱敏预览和敏感访问审计。
 package com.campusresale.files;
 
 import com.campusresale.platform.api.ApiException;
@@ -53,6 +54,9 @@ public class FileService {
         this.bucket = properties.storage().bucket();
     }
 
+    /**
+     * 上传图片文件：先做大小/类型校验，再写入对象存储，最后落库保存业务可追溯的文件元数据。
+     */
     @Transactional
     public StoredFileSummary upload(MultipartFile file, FileKind fileKind, VisibilityScope requestedScope, CurrentPrincipal principal) {
         byte[] bytes = readBytes(file);
@@ -84,11 +88,15 @@ public class FileService {
             );
             return StoredFileSummary.from(record);
         } catch (RuntimeException exception) {
+            // 元数据落库失败时回收刚写入的对象，避免 MinIO 中留下无主文件。
             objectStorageClient.deleteObject(storageKey);
             throw exception;
         }
     }
 
+    /**
+     * 返回文件元数据，权限口径比原件读取宽：本人可看到认证材料元信息，但不能直接拿到原件。
+     */
     public StoredFileSummary metadata(long fileId, Optional<CurrentPrincipal> principal) {
         StoredFileRecord record = fileRepository.findById(fileId)
                 .orElseThrow(() -> ApiExceptions.notFound("文件不存在或不可见"));
@@ -96,6 +104,9 @@ public class FileService {
         return StoredFileSummary.from(record);
     }
 
+    /**
+     * 根据文件可见范围读取内容：公开图直接返回，私密/参与者/管理员专属材料分别走不同授权分支。
+     */
     public FileContentResponse content(long fileId, Optional<CurrentPrincipal> principal, String reason, String ipAddress) {
         StoredFileRecord record = fileRepository.findById(fileId)
                 .orElseThrow(() -> ApiExceptions.notFound("文件不存在或不可见"));
@@ -131,6 +142,7 @@ public class FileService {
             throw ApiExceptions.notFound("文件不存在或不可见");
         }
 
+        // 校园认证材料是最敏感的文件类型：本人只能看脱敏预览，管理员看原件必须留审计记录。
         if (record.visibilityScope() == VisibilityScope.ADMIN_ONLY && record.fileKind() == FileKind.CAMPUS_AUTH_MATERIAL) {
             if (currentPrincipal != null && isAdmin(currentPrincipal)) {
                 return originalSensitiveContent(record, currentPrincipal, "CAMPUS_AUTH_MATERIAL", reason, ipAddress);
@@ -150,6 +162,9 @@ public class FileService {
         throw ApiExceptions.notFound("文件不存在或不可见");
     }
 
+    /**
+     * 校园认证保存时调用：确保 documentFileIds 确实是当前用户上传的认证材料，防止串用他人文件。
+     */
     public StoredFileRecord requireOwnedCampusAuthMaterial(long fileId, long ownerUserId) {
         StoredFileRecord record = fileRepository.findById(fileId)
                 .orElseThrow(() -> ApiExceptions.validation("认证材料不存在", Map.of("field", "documentFileIds")));
@@ -161,6 +176,9 @@ public class FileService {
         return record;
     }
 
+    /**
+     * 退款流程使用的证据校验，要求文件归属本人且可见范围仍为 PRIVATE。
+     */
     public StoredFileRecord requireOwnedOrderEvidence(long fileId, long ownerUserId) {
         StoredFileRecord record = fileRepository.findById(fileId)
                 .orElseThrow(() -> ApiExceptions.validation("退款证据文件不存在", Map.of("field", "evidenceFileIds")));
@@ -172,6 +190,9 @@ public class FileService {
         return record;
     }
 
+    /**
+     * 头像绑定前校验文件归属和公开属性，避免把私密材料误设为头像。
+     */
     public StoredFileRecord requireOwnedPublicAvatar(long fileId, long ownerUserId) {
         StoredFileRecord record = fileRepository.findById(fileId)
                 .orElseThrow(() -> ApiExceptions.validation("头像文件不存在", Map.of("field", "avatarFileId")));
@@ -209,6 +230,7 @@ public class FileService {
             String reason,
             String ipAddress
     ) {
+        // 所有敏感原件读取都从这里经过，统一补默认理由并写 sensitive_access_logs。
         String defaultReason = switch (targetType) {
             case "PRIVATE_MESSAGE_IMAGE" -> "查看私信图片";
             case "REFUND_EVIDENCE" -> "查看退款证据";
@@ -256,6 +278,7 @@ public class FileService {
     }
 
     private FileContentResponse redactedPreview(StoredFileRecord record) {
+        // 本人查看校园认证材料时生成占位预览，既确认已上传，又不把证件原图回传到普通页面。
         try {
             BufferedImage image = new BufferedImage(900, 420, BufferedImage.TYPE_INT_RGB);
             var graphics = image.createGraphics();

@@ -1,3 +1,4 @@
+// 文件功能：校园认证业务服务，串联资料保存、材料校验、提交限流、管理员审核、角色授予和审计记录。
 package com.campusresale.identity.verification;
 
 import com.campusresale.files.FileAuditStatus;
@@ -65,6 +66,7 @@ public class CampusVerificationService {
 
     @Transactional
     public CampusVerificationResponse updateMyVerification(CurrentPrincipal principal, UpsertRequest request) {
+        // 已通过认证的核心身份资料不能被学生端直接覆盖，避免绕过管理员重新核验。
         campusVerificationRepository.findByUserId(principal.id())
                 .filter(snapshot -> snapshot.auth().status() == CampusVerificationStatus.APPROVED)
                 .ifPresent(snapshot -> {
@@ -73,6 +75,7 @@ public class CampusVerificationService {
 
         NormalizedUpsert normalized = normalize(request);
         List<Long> documentFileIds = validateDocumentFiles(principal.id(), normalized);
+        // 有任意内容即进入 ACCUMULATING，空表单保持 DRAFT，提交审核时再严格检查材料和分数。
         CampusVerificationStatus nextStatus = normalized.hasAnyContent()
                 ? CampusVerificationStatus.ACCUMULATING
                 : CampusVerificationStatus.DRAFT;
@@ -114,6 +117,7 @@ public class CampusVerificationService {
                 .orElseThrow(() -> ApiExceptions.conflict("提交审核前必须上传学生证或校园卡材料", Map.of("field", "documentFileIds")));
 
         int limit = systemConfigRepository.intValue("campus.auth.factor_resubmit_limit_24h", 3);
+        // 提交次数挂在证件因子上，防止同一材料在短时间内反复进入审核队列。
         boolean accepted = campusVerificationRepository.incrementSubmitCount(documentFactor.id(), Instant.now(), limit);
         if (!accepted) {
             throw ApiExceptions.rateLimited("同一认证因子 24 小时内最多提交 " + limit + " 次", Map.of("limit", limit));
@@ -156,12 +160,14 @@ public class CampusVerificationService {
             campusVerificationRepository.approveDocumentFactors(authId, admin.id(), now);
             campusVerificationRepository.markApproved(authId, admin.id(), identityClaimKey(before.auth()), now);
         } catch (DuplicateKeyException exception) {
+            // identity_claim_key 对姓名+学号做唯一约束，防止多个账号复用同一学生身份。
             throw ApiExceptions.conflict("姓名和学号组合已被其他账号认证", Map.of("field", "studentNo"));
         }
 
         CampusVerificationSnapshot after = campusVerificationRepository.findById(authId)
                 .orElseThrow(() -> ApiExceptions.notFound("认证记录不存在"));
         if (isTradeEligible(after)) {
+            // 只有认证通过、分数达标且证件因子已核验，才授予可交易学生角色。
             userAccountRepository.assignRole(after.auth().userId(), SecurityProperties.VERIFIED_STUDENT_ROLE, admin.id());
         }
         fileRepository.updateCampusAuthMaterialAuditStatus(authId, FileAuditStatus.APPROVED);
@@ -206,6 +212,7 @@ public class CampusVerificationService {
     }
 
     private NormalizedUpsert normalize(UpsertRequest request) {
+        // 前端允许分步保存，这里把空字符串统一转 null，并把同类错误固定到字段级 details。
         String realName = blankToNull(request.realName());
         String studentNo = blankToNull(request.studentNo());
         if ((realName == null) != (studentNo == null)) {
@@ -242,12 +249,14 @@ public class CampusVerificationService {
             throw ApiExceptions.validation("认证材料最多上传 " + maxCount + " 张", Map.of("maxCount", maxCount));
         }
         for (Long fileId : normalized.documentFileIds()) {
+            // 认证材料必须先通过 /api/files 以 CAMPUS_AUTH_MATERIAL 上传，不能引用普通图片或他人文件。
             fileService.requireOwnedCampusAuthMaterial(fileId, userId);
         }
         return normalized.documentFileIds();
     }
 
     private void upsertTextFactors(long campusAuthId, NormalizedUpsert normalized) {
+        // 文本类因子在学生保存时即可自动 VERIFIED，证件类因子必须等管理员审核后给分。
         if (normalized.realName() != null && normalized.studentNo() != null) {
             campusVerificationRepository.upsertFactor(
                     campusAuthId,
@@ -294,6 +303,7 @@ public class CampusVerificationService {
         CampusFactorType otherType = documentType == CampusFactorType.STUDENT_CARD
                 ? CampusFactorType.CAMPUS_CARD
                 : CampusFactorType.STUDENT_CARD;
+        // 学生证和校园卡二选一作为当前证件因子，避免两个证件类型同时挂在同一份认证草稿上。
         campusVerificationRepository.deleteFactor(campusAuthId, otherType);
         long factorId = campusVerificationRepository.upsertFactor(
                 campusAuthId,
@@ -338,6 +348,7 @@ public class CampusVerificationService {
     }
 
     private boolean isTradeEligible(CampusVerificationSnapshot snapshot) {
+        // 交易资格由认证状态、总分和证件因子共同决定，保持和 CurrentUser.canTrade 的口径一致。
         boolean hasVerifiedDocument = snapshot.factors().stream()
                 .anyMatch(factor -> factor.factorType().isDocumentType()
                         && factor.status() == CampusFactorStatus.VERIFIED);
@@ -347,6 +358,7 @@ public class CampusVerificationService {
     }
 
     private String identityClaimKey(CampusAuthRecord auth) {
+        // 不直接用明文姓名学号做唯一键，数据库只保存标准化后的哈希身份声明。
         String raw = (auth.realName() == null ? "" : auth.realName().trim())
                 + "|"
                 + (auth.studentNo() == null ? "" : auth.studentNo().trim().toLowerCase(Locale.ROOT));

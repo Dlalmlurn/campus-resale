@@ -1,3 +1,4 @@
+// 文件功能：校园认证数据访问层，维护认证主表、认证因子、材料关联、提交限流和审核状态变更。
 package com.campusresale.identity.verification;
 
 import java.sql.ResultSet;
@@ -104,6 +105,7 @@ public class CampusVerificationRepository {
             String campusEmail,
             CampusVerificationStatus status
     ) {
+        // 认证主表按 user_id 唯一，学生可反复保存草稿，但通过审核前每次保存都会清空旧审核结论。
         return jdbcTemplate.queryForObject("""
                         INSERT INTO campus_auths (
                             user_id,
@@ -151,6 +153,7 @@ public class CampusVerificationRepository {
             CampusFactorStatus status,
             String submittedValue
     ) {
+        // 每种认证因子在一份认证记录下只保留一条，便于按因子累积分数和审核状态。
         return jdbcTemplate.queryForObject("""
                         INSERT INTO campus_auth_factors (
                             campus_auth_id,
@@ -194,6 +197,7 @@ public class CampusVerificationRepository {
     }
 
     public void replaceFactorFiles(long factorId, List<Long> fileIds) {
+        // 证件材料文件采用替换式保存，sort_order 保留前端上传顺序。
         jdbcTemplate.update("DELETE FROM campus_auth_factor_files WHERE campus_auth_factor_id = ?", factorId);
         for (int index = 0; index < fileIds.size(); index++) {
             jdbcTemplate.update("""
@@ -232,6 +236,7 @@ public class CampusVerificationRepository {
     }
 
     public int recalculateScore(long campusAuthId) {
+        // 总分只统计 VERIFIED 因子；证件材料在管理员通过前不贡献分数。
         return jdbcTemplate.queryForObject("""
                         UPDATE campus_auths
                         SET score = COALESCE((
@@ -252,6 +257,7 @@ public class CampusVerificationRepository {
     }
 
     public boolean incrementSubmitCount(long factorId, Instant now, int limit) {
+        // 24 小时提交窗口在数据库层原子更新，避免并发点击绕过限流。
         Instant windowThreshold = now.minusSeconds(24 * 60 * 60);
         int updated = jdbcTemplate.update("""
                         UPDATE campus_auth_factors
@@ -295,6 +301,7 @@ public class CampusVerificationRepository {
     }
 
     public void approveDocumentFactors(long campusAuthId, long adminId, Instant now) {
+        // 管理员通过时把学生证/校园卡因子标记为 VERIFIED，并补齐证件因子分值。
         jdbcTemplate.update("""
                         UPDATE campus_auth_factors
                         SET status = 'VERIFIED',

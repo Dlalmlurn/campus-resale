@@ -1,3 +1,4 @@
+// 文件功能：提供站内消息列表和会话详情，支持实时私信、图片、议价卡片、聊天内下单和系统卡片跳转。
 import { Archive, ArchiveRestore, Ban, HandCoins, ImagePlus, MessageSquareText, RefreshCw, Send, ShoppingBag, Trash2, Wifi, WifiOff } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {

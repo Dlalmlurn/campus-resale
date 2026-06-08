@@ -352,11 +352,12 @@ main > section { animation: fadeInUp 180ms ease both; }
 .profile-identity h2 { margin: 0 0 5px; font-size: 1.25rem; }
 .profile-identity p { margin: 0 0 12px; color: var(--muted); }
 .avatar-upload input { display: none; }
-.profile-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1px; overflow: hidden; }
+.profile-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; overflow: hidden; }
 .profile-stat { display: grid; place-items: center; align-content: center; gap: 5px; min-height: 114px; background: #fbfdfc; }
 .profile-stat span { color: var(--muted); font-size: 0.76rem; font-weight: 800; }
 .profile-stat strong { color: var(--green-dark); font-size: 1.35rem; }
-.profile-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.account-security { margin-bottom: 18px; }
+.profile-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
 .profile-column { min-width: 0; padding: 14px; }
 .profile-column h2 { margin-bottom: 10px; font-size: 1rem; }
 .profile-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; width: 100%; min-height: 42px; padding: 9px 0; border: 0; border-top: 1px solid #e8eeeb; color: var(--ink); background: transparent; text-align: left; }

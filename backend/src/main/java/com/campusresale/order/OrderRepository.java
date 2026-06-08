@@ -1,3 +1,4 @@
+// 文件功能：封装订单、支付、退款、结算和评价表的数据访问，集中维护状态机所需的 SQL 查询与写入。
 package com.campusresale.order;
 
 import java.math.BigDecimal;
@@ -985,6 +986,7 @@ public class OrderRepository {
     }
 
     public boolean orderHasBothReviews(long orderId) {
+        // 双方互评公开以 reviewer 去重为准，避免同一方重复评价影响公开判断。
         Integer count = jdbcTemplate.queryForObject("""
                         SELECT COUNT(DISTINCT reviewer_id)::int
                         FROM reviews

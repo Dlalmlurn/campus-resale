@@ -1,3 +1,4 @@
+// 文件功能：校园认证接口请求体定义，集中约束学生提交资料和管理员审核理由长度。
 package com.campusresale.identity.verification;
 
 import jakarta.validation.constraints.Size;
@@ -8,6 +9,9 @@ public final class CampusVerificationRequests {
     private CampusVerificationRequests() {
     }
 
+    /**
+     * 学生侧保存认证草稿的请求体；documentFileIds 必须来自当前用户上传的校园认证材料。
+     */
     public record UpsertRequest(
             @Size(max = 80, message = "姓名不能超过 80 个字符")
             String realName,
@@ -27,6 +31,9 @@ public final class CampusVerificationRequests {
     ) {
     }
 
+    /**
+     * 管理员审核请求体；reason 可为空，服务层会补默认通过/驳回理由。
+     */
     public record ReviewRequest(
             @Size(max = 500, message = "审核理由不能超过 500 个字符")
             String reason

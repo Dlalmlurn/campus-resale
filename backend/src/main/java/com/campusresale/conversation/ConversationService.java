@@ -1,3 +1,4 @@
+// 文件功能：编排商品会话、私信、图片消息、议价卡片、归档删除和系统通知实时推送。
 package com.campusresale.conversation;
 
 import com.campusresale.conversation.ConversationRequests.CreateBargainRequest;
@@ -323,6 +324,7 @@ public class ConversationService {
             return;
         }
         conversationRepository.findById(conversationId).ifPresent(conversation -> {
+            // 评价系统消息只能落在订单原会话双方之间，防止跨会话泄露订单关系。
             if ((conversation.buyerId() != reviewerId && conversation.sellerId() != reviewerId)
                     || (conversation.buyerId() != receiverId && conversation.sellerId() != receiverId)) {
                 return;

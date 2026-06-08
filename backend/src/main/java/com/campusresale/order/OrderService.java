@@ -1,3 +1,4 @@
+// 文件功能：编排订单、支付、退款、结算和评价主流程，维护商品占用、资金状态、通知与信用联动。
 package com.campusresale.order;
 
 import com.campusresale.conversation.AcceptedBargainQuote;
@@ -658,6 +659,7 @@ public class OrderService {
     }
 
     private void recordReviewCredit(long reviewId, long reviewedUserId, int rating) {
+        // 评价文本不进入信用计算，信用只取星级这一结构化事实，符合正式文档的可解释口径。
         if (rating >= 4) {
             governanceRepository.insertCreditRecord(reviewedUserId, "REVIEW", reviewId, "收到 4 星及以上交易好评", 3, "收到好评", null);
         } else if (rating <= 2) {

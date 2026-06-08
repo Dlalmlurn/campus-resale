@@ -23,7 +23,7 @@ COPY settings.xml .
 COPY src ./src
 RUN mvn -B -s settings.xml package -DskipTests -q
 
-# 生产运行阶段：compose.yaml 默认构建最后阶段，保持原有发布行为。
+# 生产运行阶段：后端只监听容器内 8080；NAS 公网流量经 Caddy 4342/4343 反代进入。
 FROM docker.1ms.run/library/eclipse-temurin:21-jre-alpine AS runtime
 WORKDIR /app
 

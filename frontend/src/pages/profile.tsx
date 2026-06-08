@@ -1,10 +1,9 @@
-// 文件功能："我的"个人中心（头像、收藏、浏览、关注、我发布/买到/卖出）。原内联于 App.tsx。
+// 文件功能："我的"个人中心，集中展示头像资料、账号安全、收藏关注、最近浏览和已发布商品。
 import { KeyRound, RefreshCw, UserMinus } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { getGovernanceOverview, unfollowUser } from "../api/governance";
 import { changePassword, getMyGoods, uploadAvatar } from "../api/m1";
-import { getOrders } from "../api/orders";
-import type { CurrentUser, GoodsSummary, OrderSummary } from "../api/types";
+import type { CurrentUser, GoodsSummary } from "../api/types";
 import { Avatar, LoadingBlock, MetricTile, ProfileColumn } from "../components/ui";
 import { goodsStatusLabels, loadViewedGoods, messageOf, verificationStatusLabels, type Notify, type Route, type ViewedGoods } from "../shared/app-shared";
 
@@ -13,25 +12,23 @@ export function ProfilePage(props: { currentUser: CurrentUser; onUserChange: (us
   const [follows, setFollows] = useState<Awaited<ReturnType<typeof getGovernanceOverview>>["follows"]>([]);
   const [viewedGoods, setViewedGoods] = useState<ViewedGoods[]>([]);
   const [myGoods, setMyGoods] = useState<GoodsSummary[]>([]);
-  const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [pwForm, setPwForm] = useState({ current: "", next: "", confirm: "" });
   const [pwBusy, setPwBusy] = useState(false);
 
+  // 个人中心首屏只加载与本页卡片相关的数据，订单信息统一交给订单页展示。
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [overview, goodsPage, orderPage] = await Promise.all([
+      const [overview, goodsPage] = await Promise.all([
         getGovernanceOverview(),
-        getMyGoods({ pageSize: 50 }),
-        getOrders({ pageSize: 50 })
+        getMyGoods({ pageSize: 50 })
       ]);
       setFavorites(overview.favorites);
       setFollows(overview.follows);
       setViewedGoods(loadViewedGoods());
       setMyGoods(goodsPage.items);
-      setOrders(orderPage.items);
     } catch (error) {
       props.notify("error", messageOf(error));
     } finally {
@@ -87,16 +84,13 @@ export function ProfilePage(props: { currentUser: CurrentUser; onUserChange: (us
     }
   };
 
-  const bought = orders.filter((order) => order.buyer.id === props.currentUser.id);
-  const sold = orders.filter((order) => order.seller.id === props.currentUser.id);
-
   return (
     <section>
       <section className="page-heading profile-heading">
         <div>
           <p className="eyebrow">个人中心</p>
           <h1>我的</h1>
-          <p>查看个人资料、收藏关注、发布商品以及买卖订单。</p>
+          <p>查看个人资料、收藏关注、最近浏览和发布商品。</p>
         </div>
         <button className="icon-button subtle" type="button" aria-label="刷新我的页" onClick={() => void load()}><RefreshCw size={17} /></button>
       </section>
@@ -117,7 +111,6 @@ export function ProfilePage(props: { currentUser: CurrentUser; onUserChange: (us
           <MetricTile label="浏览" value={viewedGoods.length} />
           <MetricTile label="关注" value={follows.length} />
           <MetricTile label="发布" value={myGoods.length} />
-          <MetricTile label="买到 / 卖出" value={`${bought.length} / ${sold.length}`} />
         </div>
       </section>
       <form className="form-panel account-security" onSubmit={(event) => void submitPassword(event)}>
@@ -163,22 +156,6 @@ export function ProfilePage(props: { currentUser: CurrentUser; onUserChange: (us
               <button className="profile-row" type="button" key={item.id} onClick={() => props.navigate({ name: "goods", id: item.id })}>
                 <span>{item.title}</span>
                 <strong>{goodsStatusLabels[item.status] ?? item.status}</strong>
-              </button>
-            ))}
-          </ProfileColumn>
-          <ProfileColumn title="我买到的" empty="暂无买入订单">
-            {bought.map((item) => (
-              <button className="profile-row" type="button" key={item.id} onClick={() => props.navigate({ name: "order", id: item.id })}>
-                <span>{item.goodsTitle}</span>
-                <strong>¥{item.frozenAmount}</strong>
-              </button>
-            ))}
-          </ProfileColumn>
-          <ProfileColumn title="我卖出的" empty="暂无卖出订单">
-            {sold.map((item) => (
-              <button className="profile-row" type="button" key={item.id} onClick={() => props.navigate({ name: "order", id: item.id })}>
-                <span>{item.goodsTitle}</span>
-                <strong>¥{item.frozenAmount}</strong>
               </button>
             ))}
           </ProfileColumn>

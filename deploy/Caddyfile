@@ -1,15 +1,28 @@
 {
-    email 2072225311@qq.com
+    # 文件功能：NAS 生产入口网关配置，统一处理 4342->4343 跳转、TLS 终止、API/WebSocket 反代和基础安全响应头。
+    email {$ACME_EMAIL}
 }
 
-# 显式处理 HTTP 4342 到 HTTPS 4343 的重定向
-http://91666.icu:4342 {
-    redir https://91666.icu:4343{uri}
+# 飞牛 NAS 公网端口固定为 HTTP 4342、HTTPS 4343，域名从 compose 环境变量注入。
+http://{$PUBLIC_DOMAIN}:4342 {
+    redir https://{$PUBLIC_DOMAIN}:4343{uri} permanent
 }
 
-https://91666.icu:4343 {
+https://{$PUBLIC_DOMAIN}:4343 {
+    # 非标准公网端口无法直接完成 Let's Encrypt HTTP-01/TLS-ALPN 校验，默认使用 Caddy 内置 CA。
     tls internal
+
     encode gzip zstd
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+
     reverse_proxy /api/* backend:8080
+    reverse_proxy /ws/* backend:8080
     reverse_proxy frontend:80
 }

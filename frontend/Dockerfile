@@ -14,7 +14,7 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-# 阶段二：Nginx 静态服务
+# 阶段二：Nginx 只提供容器内静态 SPA；NAS 公网 TLS、4342/4343 入口和 /api,/ws 反代由 Caddy 承担。
 FROM docker.1ms.run/library/nginx:1.25-alpine
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /workspace/dist /usr/share/nginx/html

@@ -1,3 +1,4 @@
+// 文件功能：stored_files 数据访问层，维护文件元数据、业务绑定、审核状态和会话附件参与者校验。
 package com.campusresale.files;
 
 import java.sql.ResultSet;
@@ -36,6 +37,7 @@ public class FileRepository {
             VisibilityScope visibilityScope,
             long ownerUserId
     ) {
+        // 文件二进制在对象存储，数据库只保存索引、校验和、用途、可见范围和所属用户。
         Long fileId = jdbcTemplate.queryForObject("""
                         INSERT INTO stored_files (
                             storage_bucket,
@@ -126,6 +128,7 @@ public class FileRepository {
         if (fileIds == null || fileIds.isEmpty()) {
             return;
         }
+        // 上传文件先独立存在，业务保存成功后再绑定到商品、认证、订单等具体记录。
         namedParameterJdbcTemplate.update("""
                         UPDATE stored_files
                         SET business_type = :businessType,
@@ -170,6 +173,7 @@ public class FileRepository {
     }
 
     public boolean isMessageAttachmentParticipant(long fileId, long userId) {
+        // 私信图片的读取权不是单看 owner，而是看用户是否属于图片所在会话。
         Boolean exists = jdbcTemplate.queryForObject("""
                         SELECT EXISTS (
                             SELECT 1
@@ -189,6 +193,7 @@ public class FileRepository {
     }
 
     public void updateCampusAuthMaterialAuditStatus(long campusAuthId, FileAuditStatus auditStatus) {
+        // 管理员审核认证后，同步更新关联材料的审核状态，前端材料进度可直接读文件状态。
         jdbcTemplate.update("""
                         UPDATE stored_files sf
                         SET audit_status = ?

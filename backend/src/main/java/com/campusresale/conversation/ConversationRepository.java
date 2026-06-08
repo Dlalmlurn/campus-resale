@@ -1,3 +1,4 @@
+// 文件功能：封装会话、消息、附件和系统卡片的数据访问，支撑实时消息补偿与用户侧归档删除。
 package com.campusresale.conversation;
 
 import java.math.BigDecimal;
@@ -364,6 +365,7 @@ public class ConversationRepository {
     }
 
     public long createSystemNoticeMessage(long conversationId, String text, long orderId, Instant now) {
+        // SYSTEM_NOTICE 复用系统卡片事实表，payload 保留 orderId 供后续前端扩展结构化跳转。
         Long cardId = jdbcTemplate.queryForObject("""
                         INSERT INTO system_message_cards (
                             conversation_id,

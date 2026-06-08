@@ -114,12 +114,12 @@ CAMPUS_RESALE_AI_MODEL=deepseek-chat
 
 ## 生产部署（HTTPS）
 
-一键起带自动 HTTPS 的生产栈：
+一键起 NAS HTTPS 生产栈：
 
 ```bash
 cp .env.prod.example .env.prod   # 填域名、邮箱、强密码、可选 AI 密钥
 docker compose --env-file .env.prod -f compose.prod.yaml up -d --build
 ```
 
-前置 Caddy 自动申请/续期证书，后端固定开启 Cookie `Secure` 并把 CORS/CSRF Origin 收敛到真实域名。
+前置 Caddy 默认对外发布 HTTP 4342 / HTTPS 4343，后端固定开启 Cookie `Secure` 并把 CORS/CSRF Origin 收敛到真实域名端口。当前 NAS 非标准端口默认使用 Caddy 内置 CA；需要浏览器原生信任证书时，按部署文档配置 DNS challenge 或上游 80/443 转发。
 详见 [`docs/部署/HTTPS部署与运维说明.md`](docs/部署/HTTPS部署与运维说明.md)，答辩材料见 [`docs/答辩/`](docs/答辩/)。

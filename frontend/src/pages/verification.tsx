@@ -13,6 +13,7 @@ export function VerificationPage(props: { currentUser: CurrentUser; onUserChange
   const [documentFileIds, setDocumentFileIds] = useState<number[]>([]);
   const [busy, setBusy] = useState(false);
 
+  // 拉取本人认证快照后回填表单，已关联但本次页面未上传的材料只展示文件 id。
   const load = useCallback(async () => {
     try {
       const next = await getVerification();
@@ -36,6 +37,7 @@ export function VerificationPage(props: { currentUser: CurrentUser; onUserChange
     if (!file) return;
     setBusy(true);
     try {
+      // 校园认证材料固定以 CAMPUS_AUTH_MATERIAL 上传，后端会设置 ADMIN_ONLY 可见范围。
       const summary = await uploadFile(file, "CAMPUS_AUTH_MATERIAL");
       setDocumentFiles((current) => [...current, summary]);
       setDocumentFileIds((current) => [...new Set([...current, summary.id])]);
@@ -50,6 +52,7 @@ export function VerificationPage(props: { currentUser: CurrentUser; onUserChange
   const save = async () => {
     setBusy(true);
     try {
+      // 保存草稿时只提交文件 id，真正的文件归属和用途校验由后端 FileService 兜底。
       const next = await updateVerification({ ...form, documentFileIds });
       setVerification(next);
       props.notify("success", "认证资料已保存");
@@ -63,6 +66,7 @@ export function VerificationPage(props: { currentUser: CurrentUser; onUserChange
   const submit = async () => {
     setBusy(true);
     try {
+      // 提交后刷新当前用户，便于认证通过或状态变化后导航栏即时展示最新权限口径。
       const next = await submitVerification();
       setVerification(next);
       props.onUserChange(await getCurrentUser());

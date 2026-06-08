@@ -1,3 +1,4 @@
+// 文件功能：封装站内通知业务，统一创建、去重、未读统计以及订单/治理/消息事件提醒。
 package com.campusresale.notification;
 
 import com.campusresale.platform.api.ApiExceptions;
@@ -65,6 +66,7 @@ public class NotificationService {
             Long relatedId,
             String dedupeKey
     ) {
+        // dedupeKey 用于订单状态等幂等事件，普通私信类通知允许为空以保留每次提醒。
         if (type == null) {
             throw ApiExceptions.validation("通知类型不能为空", Map.of("field", "type"));
         }

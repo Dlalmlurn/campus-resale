@@ -1,3 +1,4 @@
+// 文件功能：学生侧校园认证接口，提供本人认证资料读取、草稿保存和提交审核。
 package com.campusresale.identity.verification;
 
 import com.campusresale.identity.verification.CampusVerificationRequests.UpsertRequest;
@@ -25,11 +26,17 @@ public class CampusVerificationController {
         this.campusVerificationService = campusVerificationService;
     }
 
+    /**
+     * 查询当前用户认证快照；没有认证记录时返回 NONE，方便前端直接渲染初始表单。
+     */
     @GetMapping("/me")
     public CampusVerificationResponse me(HttpServletRequest servletRequest) {
         return campusVerificationService.myVerification(principal(servletRequest));
     }
 
+    /**
+     * 保存认证资料草稿，包含姓名学号、院系邮箱和学生证/校园卡材料文件 id。
+     */
     @PutMapping("/me")
     public CampusVerificationResponse updateMe(
             @Valid @RequestBody UpsertRequest request,
@@ -38,6 +45,9 @@ public class CampusVerificationController {
         return campusVerificationService.updateMyVerification(principal(servletRequest), request);
     }
 
+    /**
+     * 提交审核；必须已经保存有效证件材料并达到最低可信分。
+     */
     @PostMapping("/me/submit")
     public CampusVerificationResponse submitMe(HttpServletRequest servletRequest) {
         return campusVerificationService.submitMyVerification(principal(servletRequest));

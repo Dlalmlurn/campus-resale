@@ -1,3 +1,4 @@
+// 文件功能：集中绑定 campus-resale.* 应用配置，供安全、存储、AI 等基础设施模块读取。
 package com.campusresale.platform.config;
 
 import jakarta.validation.Valid;
@@ -14,9 +15,15 @@ public record CampusResaleProperties(
         @Valid Ai ai
 ) {
 
+    /**
+     * CORS 白名单配置，生产环境应收敛到真实 HTTPS 域名和端口。
+     */
     public record Cors(List<String> allowedOrigins) {
     }
 
+    /**
+     * 对象存储连接配置，当前由 MinIO 实现读取并用于头像、商品图和认证材料。
+     */
     public record Storage(
             @NotBlank String endpoint,
             @NotBlank String bucket,

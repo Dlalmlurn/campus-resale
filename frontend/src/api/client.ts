@@ -1,3 +1,4 @@
+// 文件功能：封装前端统一 API 请求、错误对象和查询字符串生成逻辑。
 export interface ApiErrorPayload {
   code: string;
   message: string;
@@ -19,6 +20,7 @@ export class ApiError extends Error {
   }
 }
 
+// 统一携带同源 Cookie 调用后端，并把后端标准错误响应转换为 ApiError。
 export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (typeof init.body === "string" && !headers.has("Content-Type")) {
@@ -52,6 +54,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   return response.json() as Promise<T>;
 }
 
+// 过滤空值后生成 URL 查询串，避免把未选择的筛选项传给后端。
 export function queryString(params: Record<string, string | number | null | undefined>) {
   const search = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {

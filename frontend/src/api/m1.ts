@@ -1,3 +1,4 @@
+// 文件功能：封装 M1 身份、商品目录、校园认证、文件上传和后台审核相关 API。
 import { apiRequest, queryString } from "./client";
 import type {
   CampusPlaceSummary,
@@ -33,6 +34,7 @@ export function logout() {
   return apiRequest<{ success: boolean }>("/api/auth/logout", { method: "POST" });
 }
 
+// 商品发布与筛选依赖分类、标签和校区地点，页面启动时一次性并发加载。
 export async function getCatalog() {
   const [categories, tags, places] = await Promise.all([
     apiRequest<CategorySummary[]>("/api/categories"),
@@ -69,6 +71,7 @@ export function getVerification() {
   return apiRequest<CampusVerification>("/api/verifications/me");
 }
 
+// 保存本人校园认证草稿；材料文件 id 必须先通过 uploadFile 上传为 CAMPUS_AUTH_MATERIAL。
 export function updateVerification(request: {
   realName: string;
   studentNo: string;
@@ -101,6 +104,7 @@ export function changePassword(currentPassword: string, newPassword: string) {
 }
 
 export function uploadFile(file: File, fileKind: "AVATAR" | "GOODS_IMAGE" | "CAMPUS_AUTH_MATERIAL" | "ORDER_EVIDENCE" | "REPORT_EVIDENCE" | "APPEAL_EVIDENCE" | "MESSAGE_IMAGE") {
+  // FormData 由浏览器自动补充 multipart boundary，apiRequest 不会强行设置 JSON Content-Type。
   const body = new FormData();
   body.set("file", file);
   body.set("fileKind", fileKind);
@@ -111,6 +115,7 @@ export function getAdminVerifications(status = "") {
   return apiRequest<PageResponse<CampusVerification>>(`/api/admin/verifications${queryString({ status })}`);
 }
 
+// 管理员审核校园认证；后端会同步证件材料审核状态、操作日志和可交易学生角色。
 export function reviewVerification(id: number, action: "approve" | "reject", reason: string) {
   return apiRequest<CampusVerification>(`/api/admin/verifications/${id}/${action}`, {
     method: "POST",
