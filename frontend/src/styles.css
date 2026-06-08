@@ -288,6 +288,9 @@ h2 { letter-spacing: 0; }
 .metric-tile { min-height: 112px; padding: 15px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
 .metric-tile span, .metric-tile small { display: block; color: var(--muted); font-size: 0.78rem; }
 .metric-tile strong { display: block; margin: 8px 0 4px; color: var(--green-dark); font-size: 1.8rem; line-height: 1; }
+.credit-rule-panel { display: grid; gap: 5px; margin: -4px 0 14px; padding: 12px 14px; border: 1px solid #d8e5df; border-radius: 8px; background: #f7fbf9; }
+.credit-rule-panel strong { color: var(--green-dark); font-size: 0.88rem; }
+.credit-rule-panel p { margin: 0; color: #52645b; font-size: 0.84rem; line-height: 1.6; }
 .governance-layout { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(250px, 0.85fr); gap: 12px; align-items: start; }
 .governance-layout .panel-title h2, .admin-n3 .panel-title h2 { display: inline-flex; align-items: center; gap: 7px; }
 .governance-actions { display: grid; gap: 12px; }

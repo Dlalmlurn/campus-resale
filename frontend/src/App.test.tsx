@@ -66,6 +66,14 @@ describe("App", () => {
     expect(screen.getByText("请先登录后继续")).toBeInTheDocument();
   });
 
+  it("guards governance behind login", async () => {
+    stubBackend();
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "治理" }));
+    await waitFor(() => expect(screen.getByText("登录账号")).toBeInTheDocument());
+    expect(screen.getByText("请先登录后继续")).toBeInTheDocument();
+  });
+
   it("sends authenticated trade-ineligible users to campus verification before publishing", async () => {
     stubBackend(registeredUser);
     render(<App />);

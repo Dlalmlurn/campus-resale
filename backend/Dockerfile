@@ -1,15 +1,30 @@
-# 阶段一：Maven 构建（缓存依赖层，加速重复构建）
-FROM maven:3.9-eclipse-temurin-21-alpine AS build
+# 依赖缓存层：生产构建和开发镜像复用 Maven 本地仓库，加速重复构建。
+FROM maven:3.9-eclipse-temurin-21-alpine AS deps
 WORKDIR /workspace
-# 先单独复制 pom.xml 缓存依赖，只有 pom.xml 变动时才重新下载
 COPY pom.xml .
 COPY settings.xml .
 RUN mvn -B -s settings.xml dependency:go-offline -q
+
+# 开发阶段：compose.override.yaml 挂载源码后直接运行 Spring Boot，避免业务代码改动后重建镜像。
+FROM maven:3.9-eclipse-temurin-21-alpine AS dev
+WORKDIR /workspace
+COPY --from=deps /root/.m2 /root/.m2
+COPY pom.xml .
+COPY settings.xml .
+EXPOSE 8080
+CMD ["mvn", "-B", "-s", "settings.xml", "spring-boot:run"]
+
+# 构建阶段：生成生产运行所需的可执行 jar。
+FROM maven:3.9-eclipse-temurin-21-alpine AS build
+WORKDIR /workspace
+COPY --from=deps /root/.m2 /root/.m2
+COPY pom.xml .
+COPY settings.xml .
 COPY src ./src
 RUN mvn -B -s settings.xml package -DskipTests -q
 
-# 阶段二：最小 JRE 运行镜像
-FROM eclipse-temurin:21-jre-alpine
+# 生产运行阶段：compose.yaml 默认构建最后阶段，保持原有发布行为。
+FROM eclipse-temurin:21-jre-alpine AS runtime
 WORKDIR /app
 
 # 设置时区为 Asia/Shanghai

@@ -193,7 +193,7 @@ export function App() {
   }, [refreshGoods]);
 
   useEffect(() => {
-    if ((route.name === "orders" || route.name === "order" || route.name === "conversations" || route.name === "conversation" || route.name === "notifications") && authChecked && currentUser === null) {
+    if ((route.name === "orders" || route.name === "order" || route.name === "conversations" || route.name === "conversation" || route.name === "notifications" || route.name === "governance") && authChecked && currentUser === null) {
       notify("error", "请先登录后继续");
       navigate({ name: "auth" });
       return;
@@ -205,7 +205,7 @@ export function App() {
   }, [authChecked, currentUser, navigate, notify, route.name]);
 
   const guardedNavigate = (next: Route) => {
-    if (!currentUser && (next.name === "verification" || next.name === "seller" || next.name === "admin" || next.name === "orders" || next.name === "order" || next.name === "conversations" || next.name === "conversation" || next.name === "notifications")) {
+    if (!currentUser && (next.name === "verification" || next.name === "seller" || next.name === "admin" || next.name === "orders" || next.name === "order" || next.name === "conversations" || next.name === "conversation" || next.name === "notifications" || next.name === "governance")) {
       notify("error", "请先登录后继续");
       navigate({ name: "auth" });
       return;

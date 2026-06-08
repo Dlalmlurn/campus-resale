@@ -1,0 +1,33 @@
+# 本地开发覆盖层：docker compose up 会自动与 compose.yaml 合并。
+# 业务代码通过 bind mount 进入容器，日常改代码无需重新 build 镜像。
+
+services:
+  backend:
+    build:
+      context: ./backend
+      target: dev
+    environment:
+      SPRING_DEVTOOLS_RESTART_POLL_INTERVAL: 1s
+      SPRING_DEVTOOLS_RESTART_QUIET_PERIOD: 400ms
+    volumes:
+      - ./backend/src:/workspace/src
+      - ./backend/pom.xml:/workspace/pom.xml
+      - ./backend/settings.xml:/workspace/settings.xml
+      - maven-repo:/root/.m2
+    command: ["mvn", "-B", "-s", "settings.xml", "spring-boot:run"]
+
+  frontend:
+    build:
+      context: ./frontend
+      target: dev
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+      VITE_DEV_PROXY_TARGET: http://backend:8080
+    volumes:
+      - ./frontend:/workspace
+      - /workspace/node_modules
+    ports: !override
+      - "${FRONTEND_DEV_PORT:-5173}:5173"
+
+volumes:
+  maven-repo:

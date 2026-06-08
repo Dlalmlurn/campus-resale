@@ -14,6 +14,7 @@ import com.campusresale.governance.N3Requests.SubmitReportRequest;
 import com.campusresale.governance.N3Responses.ReportResponse;
 import com.campusresale.governance.N3Responses.UserSummary;
 import com.campusresale.notification.NotificationService;
+import com.campusresale.platform.api.ApiException;
 import com.campusresale.platform.audit.AuditLogRepository;
 import com.campusresale.platform.security.CurrentPrincipal;
 import java.math.BigDecimal;
@@ -77,6 +78,7 @@ class N3GovernanceServiceTest {
         ReportResponse before = report("PENDING");
         ReportResponse after = report("UPHELD");
         when(repository.findReport(88L)).thenReturn(Optional.of(before));
+        when(repository.userExists(11L)).thenReturn(true);
         when(repository.updateReport(eq(88L), eq(1L), eq("UPHELD"), eq("举报成立，下架商品并限制卖家交易"), any(Instant.class)))
                 .thenReturn(Optional.of(after));
         when(repository.createPenalty(11L, 88L, null, "TRADE_RESTRICT", "举报成立，下架商品并限制卖家交易", 1L)).thenReturn(6L);
@@ -99,6 +101,37 @@ class N3GovernanceServiceTest {
         verify(repository).applyUpheldReportEffects(88L, "GOODS", 10L, 11L, 1L, "举报成立，下架商品并限制卖家交易");
         verify(repository).insertCreditRecord(11L, "REPORT", 88L, "举报成立，下架商品并限制卖家交易", -20, "平台治理记录", 1L);
         verify(auditLogRepository).recordOperation(eq(1L), eq("N3_REPORT_HANDLE"), eq("REPORT"), eq(88L), eq(before), eq(after), eq("127.0.0.1"));
+    }
+
+    @Test
+    void handleReportRejectsMissingReport() {
+        CurrentPrincipal admin = principal(1L, Set.of("CONTENT_ADMIN"));
+        when(repository.findReport(404L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.handleReport(404L, new HandleReportRequest("UPHELD", "找不到举报", null, null), admin, "127.0.0.1"))
+                .isInstanceOf(ApiException.class)
+                .satisfies(exception -> assertThat(((ApiException) exception).code()).isEqualTo("NOT_FOUND"));
+    }
+
+    @Test
+    void handleReportRejectsAlreadyHandledReport() {
+        CurrentPrincipal admin = principal(1L, Set.of("CONTENT_ADMIN"));
+        when(repository.findReport(88L)).thenReturn(Optional.of(report("UPHELD")));
+
+        assertThatThrownBy(() -> service.handleReport(88L, new HandleReportRequest("REJECTED", "重复处理", null, null), admin, "127.0.0.1"))
+                .isInstanceOf(ApiException.class)
+                .satisfies(exception -> assertThat(((ApiException) exception).code()).isEqualTo("CONFLICT"));
+    }
+
+    @Test
+    void handleReportRejectsMissingPenaltyUserBeforeUpdatingReport() {
+        CurrentPrincipal admin = principal(1L, Set.of("CONTENT_ADMIN"));
+        when(repository.findReport(88L)).thenReturn(Optional.of(report("PENDING")));
+        when(repository.userExists(999L)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.handleReport(88L, new HandleReportRequest("UPHELD", "处罚用户不存在", 999L, "WARNING"), admin, "127.0.0.1"))
+                .isInstanceOf(ApiException.class)
+                .satisfies(exception -> assertThat(((ApiException) exception).code()).isEqualTo("NOT_FOUND"));
     }
 
     private ReportResponse report(String status) {

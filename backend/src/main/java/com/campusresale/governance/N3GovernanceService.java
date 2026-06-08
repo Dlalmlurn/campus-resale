@@ -1,3 +1,4 @@
+// 文件功能：编排 N3 平台治理业务流程，集中处理举报、申诉、退款、处罚与信用摘要。
 package com.campusresale.governance;
 
 import com.campusresale.governance.N3GovernanceRepository.OrderSnapshot;
@@ -37,6 +38,7 @@ public class N3GovernanceService {
 
     private static final Set<String> REPORT_TARGETS = Set.of("GOODS", "ORDER", "USER");
     private static final Set<String> REPORT_STATUSES = Set.of("UPHELD", "REJECTED", "CLOSED");
+    private static final Set<String> OPEN_REPORT_STATUSES = Set.of("PENDING", "PROCESSING");
     private static final Set<String> APPEAL_STATUSES = Set.of("APPROVED", "REJECTED", "CLOSED");
     private static final Set<String> REFUND_TYPES = Set.of("FULL", "PARTIAL");
     private static final Set<String> REFUND_STATUSES = Set.of("PROCESSING", "REFUNDED", "FAILED", "CLOSED");
@@ -194,8 +196,18 @@ public class N3GovernanceService {
     @Transactional
     public ReportResponse handleReport(long reportId, HandleReportRequest request, CurrentPrincipal admin, String ipAddress) {
         ReportResponse before = repository.findReport(reportId).orElseThrow(() -> ApiExceptions.notFound("举报记录不存在"));
+        if (!OPEN_REPORT_STATUSES.contains(before.status())) {
+            throw ApiExceptions.conflict("举报已处理，不能重复操作", Map.of("reportId", reportId, "status", before.status()));
+        }
         String status = oneOf(required(request.status(), "status", "处理状态不能为空").toUpperCase(), REPORT_STATUSES, "status");
         String note = max(required(request.handlingNote(), "handlingNote", "处理说明不能为空"), 1000, "handlingNote");
+        String penaltyType = null;
+        if ("UPHELD".equals(status) && request.penaltyUserId() != null) {
+            if (!repository.userExists(request.penaltyUserId())) {
+                throw ApiExceptions.notFound("处罚用户不存在");
+            }
+            penaltyType = oneOf(defaultText(request.penaltyType(), "WARNING").toUpperCase(), PENALTY_TYPES, "penaltyType");
+        }
         ReportResponse after = repository.updateReport(reportId, admin.id(), status, note, Instant.now())
                 .orElseThrow(() -> ApiExceptions.notFound("举报记录不存在"));
         auditLogRepository.recordOperation(admin.id(), "N3_REPORT_HANDLE", "REPORT", reportId, before, after, ipAddress);
@@ -204,7 +216,6 @@ public class N3GovernanceService {
             repository.applyUpheldReportEffects(reportId, before.targetType(), before.targetId(), request.penaltyUserId(), admin.id(), note);
         }
         if ("UPHELD".equals(status) && request.penaltyUserId() != null) {
-            String penaltyType = oneOf(defaultText(request.penaltyType(), "WARNING").toUpperCase(), PENALTY_TYPES, "penaltyType");
             createPenaltyInternal(request.penaltyUserId(), reportId, null, penaltyType, note, admin, ipAddress);
         }
         notificationService.create(before.reporter().id(), NotificationType.REPORT_RESOLVED, "举报处理完成", "你的举报已完成处理，处理结果为 " + status + "。", "REPORT", reportId, null);

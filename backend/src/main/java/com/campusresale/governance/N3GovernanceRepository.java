@@ -1,3 +1,4 @@
+// 文件功能：封装 N3 治理模块的数据访问，负责举报、申诉、退款、处罚、收藏关注与信用画像查询。
 package com.campusresale.governance;
 
 import com.campusresale.governance.N3Responses.AppealResponse;
@@ -9,6 +10,7 @@ import com.campusresale.governance.N3Responses.PenaltyResponse;
 import com.campusresale.governance.N3Responses.RefundResponse;
 import com.campusresale.governance.N3Responses.ReportResponse;
 import com.campusresale.governance.N3Responses.UserSummary;
+import com.campusresale.platform.api.ApiExceptions;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.ResultSet;
@@ -18,6 +20,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -410,7 +413,7 @@ public class N3GovernanceRepository {
 
     public void applyUpheldReportEffects(long reportId, String targetType, long targetId, Long penaltyUserId, long adminId, String note) {
         if ("GOODS".equals(targetType)) {
-            jdbcTemplate.update("""
+            int goodsUpdated = jdbcTemplate.update("""
                             UPDATE goods
                             SET status = 'OFF_SHELF',
                                 audit_status = 'REJECTED',
@@ -420,6 +423,9 @@ public class N3GovernanceRepository {
                             """,
                     targetId
             );
+            if (goodsUpdated == 0) {
+                throw ApiExceptions.conflict("举报商品已删除或不可处理", Map.of("targetType", targetType, "targetId", targetId));
+            }
             jdbcTemplate.update("""
                             UPDATE trade_orders
                             SET status = 'DISPUTE_PROCESSING',
@@ -433,7 +439,7 @@ public class N3GovernanceRepository {
             return;
         }
         if ("ORDER".equals(targetType)) {
-            jdbcTemplate.update("""
+            int ordersUpdated = jdbcTemplate.update("""
                             UPDATE trade_orders
                             SET status = 'DISPUTE_PROCESSING',
                                 updated_at = now()
@@ -442,6 +448,9 @@ public class N3GovernanceRepository {
                             """,
                     targetId
             );
+            if (ordersUpdated == 0 && !targetExists("ORDER", targetId)) {
+                throw ApiExceptions.notFound("举报订单不存在");
+            }
             insertReportStateRecords(reportId, "ORDER", targetId, adminId, note);
         }
     }
