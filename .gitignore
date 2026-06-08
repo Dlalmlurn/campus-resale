@@ -1,0 +1,82 @@
+# Local source/reference materials
+docs/历史资料/source_materials/
+docs/source_materials/
+source_materials/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+!.env.prod.example
+*.local
+application-local.yml
+application-local.yaml
+application-*.local.yml
+application-*.local.yaml
+
+# Logs and runtime files
+logs/
+*.log
+*.pid
+*.seed
+*.pid.lock
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+Desktop.ini
+*:Zone.Identifier
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.iml
+
+# Java / Spring Boot
+target/
+build/
+out/
+*.class
+.gradle/
+.mvn/wrapper/maven-wrapper.jar
+
+# Node / React / Vite
+node_modules/
+dist/
+.vite/
+.turbo/
+coverage/
+*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Package-manager caches
+.npm/
+.pnpm-store/
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.yarn/install-state.gz
+
+# Docker and local service data
+.docker-data/
+docker-data/
+data/
+tmp/
+temp/
+uploads/
+/storage/
+minio/
+
+# Generated archives and binary exports
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z

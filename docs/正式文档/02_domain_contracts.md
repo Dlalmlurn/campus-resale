@@ -1,0 +1,285 @@
+# 领域契约
+
+本文件定义校园二手交易系统的稳定领域契约：角色权限、对象分组、接口族、事件族和一致性规则。它不是建表说明，也不是接口细节说明；后续代码、数据库和页面流程需要映射这些契约。
+
+## 权限契约
+
+| 行为 | 游客 | 注册用户 | 认证学生 | 内容管理员 | 超级管理员 |
+| --- | --- | --- | --- | --- | --- |
+| 浏览公开商品、搜索筛选 | 允许 | 允许 | 允许 | 允许 | 允许 |
+| 收藏商品、关注卖家、公开留言 | 不允许 | 允许 | 允许 | 允许 | 允许 |
+| 提交或更新校园认证 | 不允许 | 允许 | 允许 | 不适用 | 不适用 |
+| 发布商品、私信卖家、创建订单 | 不允许 | 不允许 | 允许 | 不适用 | 不适用 |
+| 支付订单、申请退款、评价订单 | 不允许 | 不允许 | 仅订单参与者 | 可协助处理 | 可协助处理 |
+| 查看订单、会话和结算状态 | 不允许 | 仅本人参与对象 | 仅本人参与对象 | 允许查看职责范围内对象 | 允许 |
+| 举报内容、发起申诉 | 不允许 | 允许 | 允许 | 允许 | 允许 |
+| 审核认证和商品 | 不允许 | 不允许 | 不允许 | 允许 | 允许 |
+| 处理举报、申诉、退款异常和支付异常 | 不允许 | 不允许 | 不允许 | 允许 | 允许 |
+| 查看敏感材料 | 不允许 | 仅本人提交或本人参与对象 | 仅本人提交或本人参与对象 | 仅处理职责内并留痕 | 仅处理职责内并留痕 |
+| 查看敏感访问日志 | 不允许 | 不允许 | 不允许 | 允许查看职责范围内记录 | 允许 |
+| 管理角色和系统配置 | 不允许 | 不允许 | 不允许 | 不允许 | 允许 |
+
+## 领域对象分组
+
+| 分组 | 对象 | 契约含义 |
+| --- | --- | --- |
+| 身份权限 | `User`, `Role`, `UserRole`, `UserSession`, `CampusAuth`, `CampusAuthFactor` | 用户主体、角色绑定、服务端会话、校园认证记录、认证因子、可信度和审核结论。 |
+| 文件材料 | `StoredFile` | 文件二进制外置存储，数据库保存存储键、元数据、所属对象、上传者、审核状态和可见范围。 |
+| 商品发布 | `Goods`, `GoodsImage`, `Category`, `Tag`, `AuditRecord`, `RuleHitRecord` | 商品草稿、图片、分类标签、审核记录、规则命中和上下架状态。 |
+| 发现互动 | `BrowseRecord`, `SearchRecord`, `RecommendationResult`, `Favorite`, `Follow`, `GoodsComment`, `CampusPlace` | 浏览搜索事实、推荐结果、校园地点字典和公开互动。 |
+| 会话协商 | `Conversation`, `Message`, `MessageAttachment`, `SystemMessageCard`, `ReadState` | 商品相关文本私信、图片私信、系统卡片、消息事实、已读未读和重连补偿。 |
+| 订单面交 | `Order`, `OrderStateRecord`, `CompletionConfirmationRequest`, `TradeLocation` | 订单、商品占用、冻结金额、校园地点字典、面交信息、完成确认和状态历史。 |
+| 支付资金 | `PaymentOrder`, `PaymentTransaction`, `PaymentCallbackLog`, `PayoutAccount`, `SettlementRecord`, `SettlementAttempt`, `RefundOrder` | 支付单、支付流水、回调日志、收款方式、托管结算、结算尝试、全额退款和部分退款。 |
+| 评价信用 | `Review`, `CreditRecord`, `CreditSummary` | 交易评价、信用变化事实、内部数值或等级记录、对外维度摘要和行为标签。 |
+| 治理责任 | `Report`, `Appeal`, `DisputeResponsibilityRecord`, `PenaltyRecord` | 举报、申诉、责任认定和处罚记录。 |
+| 通知审计统计 | `Notification`, `Announcement`, `OperationLog`, `SensitiveAccessLog`, `AnalyticsView` | 站内通知、公告、管理员操作、敏感访问留痕和后台统计口径。 |
+| 智能辅助 | `IntelligenceTask`, `IntelligenceResult` | AI 或规则服务处理任务、输出结果、理由、置信度、预检标签和采纳状态。 |
+
+## 关键状态对象
+
+| 对象 | 必须表达的状态语义 |
+| --- | --- |
+| `CampusAuth` | 提交、可信度积累、审核、通过、驳回、失效。 |
+| `Goods` | 草稿、审核、在售、预订、已售、下架、删除。 |
+| `Conversation` / `Message` | 正常、归档、屏蔽、发送、已读、撤回。 |
+| `Order` | 占用、卖家确认、待支付、待面交、完成待结算、完成、取消、关闭、纠纷、退款。 |
+| `PaymentOrder` | 待支付、处理中、已支付已托管、失败、关闭。 |
+| `SettlementRecord` | 待结算、处理中、已结算、失败、关闭。 |
+| `SettlementAttempt` | 待执行、处理中、成功、失败。 |
+| `RefundOrder` | 待处理、处理中、已退款、失败、关闭。 |
+| `Report` / `Appeal` | 待处理、处理中、成立、未成立、关闭、待复核、通过、驳回。 |
+| `IntelligenceTask` / `IntelligenceResult` | 待处理、处理中、完成、失败、取消、生成、采纳、忽略、过期。 |
+
+## 接口族
+
+| 接口族 | 稳定职责 |
+| --- | --- |
+| Identity API | 注册、登录、退出、会话状态探针、滑动续期确认、权限查询。 |
+| Campus Auth API | 提交认证因子、查看认证状态和可信度、补充材料、审核认证。 |
+| File API | 上传文件、关联业务对象、查询文件元数据、生成访问地址、控制可见范围。 |
+| Goods API | 创建草稿、编辑商品、调用发布辅助、提交审核、上架、下架、查看详情。 |
+| Discovery API | 基于 PostgreSQL 全文检索、`pg_trgm` 模糊匹配和常规索引提供搜索、筛选、排序、同类推荐、热门商品、高信用卖家商品、校园地点筛选和推荐原因查询。 |
+| Interaction API | 收藏、取消收藏、关注、取消关注、留言、回复。 |
+| Conversation API | 建立会话、发送文本消息、发送图片消息、发送系统卡片、标记已读、查看历史、查询缺失消息。 |
+| Realtime API | 通过 WebSocket 推送新消息、会话更新、未读数变化和已读状态。 |
+| Order API | 创建订单、占用商品、确认订单、拒绝订单、取消订单、完成确认、查看状态历史。 |
+| Payment API | 创建支付单、查询支付状态、接收支付回调、关闭支付单、创建退款单、查询退款状态、创建结算记录、创建或重试结算尝试。 |
+| Review API | 提交评价、查看评价、触发信用记录。 |
+| Credit API | 查看信用摘要、查看信用来源、追加人工修正记录。 |
+| Governance API | 提交举报、处理举报、发起申诉、复核申诉、记录责任和处罚。 |
+| Notification API | 读取通知、标记已读、发布公告。 |
+| Privacy Audit API | 记录敏感材料访问，查询职责范围内的敏感访问日志。 |
+| Admin Analytics API | 读取用户、商品、订单、支付、退款、举报、活跃度、信用和日志统计。 |
+| Intelligence API | 创建异步发布辅助任务、保存输入摘要、返回发布建议和审核预检标签、记录采纳状态、处理配额、超时、重试和全局开关。 |
+
+## 已落地接口路径索引
+
+本节记录当前工程已实现的稳定 REST / WebSocket 路径，方便正式口径和代码实现对齐。它只固定接口名和职责，不替代请求响应字段说明或 OpenAPI 文档。
+
+| 接口族 | 已落地路径 |
+| --- | --- |
+| Health | `GET /api/health` |
+| Identity API | `POST /api/auth/register`；`POST /api/auth/login`；`POST /api/auth/logout`；`GET /api/auth/me` |
+| Catalog API | `GET /api/categories`；`GET /api/tags`；`GET /api/campus-places` |
+| File API | `POST /api/files`；`GET /api/files/{id}`；`GET /api/files/{id}/content` |
+| Campus Auth API | `GET /api/verifications/me`；`PUT /api/verifications/me`；`POST /api/verifications/me/submit`；`GET /api/admin/verifications`；`POST /api/admin/verifications/{id}/approve`；`POST /api/admin/verifications/{id}/reject` |
+| Goods API | `POST /api/goods/drafts`；`PATCH /api/goods/{id}`；`POST /api/goods/{id}/submit`；`GET /api/goods/mine`；`GET /api/goods`；`GET /api/goods/{id}`；`GET /api/admin/goods`；`POST /api/admin/goods/{id}/approve`；`POST /api/admin/goods/{id}/reject` |
+| Conversation API | `POST /api/conversations`；`GET /api/conversations`；`GET /api/conversations/{id}`；`GET /api/conversations/{id}/messages`；`POST /api/conversations/{id}/messages`；`POST /api/conversations/{id}/image-messages`；`POST /api/conversations/{id}/bargain-cards`；`POST /api/conversations/{id}/bargain-cards/{cardId}/accept`；`POST /api/conversations/{id}/bargain-cards/{cardId}/reject`；`POST /api/conversations/{id}/archive`；`POST /api/conversations/{id}/unarchive`；`POST /api/conversations/{id}/block`；`GET /api/admin/conversations/{id}` |
+| Realtime API | `WS /ws/conversations` |
+| Order API | `POST /api/orders`；`GET /api/orders`；`GET /api/orders/{id}`；`POST /api/orders/{id}/seller-confirm`；`POST /api/orders/{id}/seller-reject`；`POST /api/orders/{id}/buyer-cancel`；`POST /api/orders/{id}/completion-requests`；`POST /api/orders/{id}/completion-requests/{requestId}/confirm` |
+| Payment / Settlement / Refund API | `POST /api/orders/{id}/payments/simulate`；`GET /api/orders/{id}/payment`；`GET /api/orders/{id}/payment/transactions`；`GET /api/orders/{id}/settlement`；`GET /api/orders/{id}/refunds`；`POST /api/orders/{id}/refunds`；`GET /api/admin/payments`；`GET /api/admin/refunds`；`POST /api/admin/refunds/{id}/decide`；`GET /api/admin/settlements`；`POST /api/admin/settlements/{id}/advance`；`POST /api/admin/settlements/advance-due` |
+| Review API | `POST /api/orders/{id}/reviews`；`GET /api/orders/{id}/reviews` |
+| Notification API | `GET /api/notifications`；`GET /api/notifications/unread-count`；`POST /api/notifications/{id}/read`；`POST /api/notifications/read-all` |
+| Governance / Credit / Interaction API | `GET /api/n3/governance-overview`；`POST /api/n3/reports`；`GET /api/n3/reports`；`POST /api/n3/appeals`；`GET /api/n3/appeals`；`POST /api/n3/refunds`；`GET /api/n3/refunds`；`GET /api/n3/credit/me`；`POST /api/n3/favorites/{goodsId}`；`DELETE /api/n3/favorites/{goodsId}`；`GET /api/n3/favorites`；`POST /api/n3/follows/{userId}`；`DELETE /api/n3/follows/{userId}`；`GET /api/n3/follows` |
+| Admin Governance API | `GET /api/admin/n3/queue`；`GET /api/admin/n3/reports`；`POST /api/admin/n3/reports/{id}/handle`；`GET /api/admin/n3/appeals`；`POST /api/admin/n3/appeals/{id}/review`；`GET /api/admin/n3/refunds`；`POST /api/admin/n3/refunds/{id}/decide`；`POST /api/admin/n3/penalties`；`POST /api/admin/n3/penalties/{id}/lift` |
+| Audit / Analytics API | `GET /api/admin/operation-logs`；`GET /api/admin/sensitive-access-logs`；`GET /api/admin/stats/dashboard`；`GET /api/admin/stats/order-trend` |
+| Intelligence API | `POST /api/intelligence/goods-assist` |
+
+## 事件族
+
+领域事件用于描述已经发生的事实，事件名称不要求成为最终代码名称，但语义应稳定。
+
+| 事件族 | 覆盖事实 |
+| --- | --- |
+| Identity Events | 用户注册、会话创建、会话滑动续期、会话失效、认证提交、因子验证、可信度变化、认证通过、认证驳回、认证失效。 |
+| File Events | 文件上传、文件可见范围变化、文件审核状态变化。 |
+| Goods Events | 商品草稿创建、AI 或规则任务创建、结果生成、商品提交审核、审核通过、审核驳回、上架、预订、释放、售出、下架、删除。 |
+| Discovery Events | 商品浏览、搜索执行、分类点击、推荐结果生成、收藏、关注、留言。 |
+| Conversation Events | 会话创建、文本消息发送、图片消息发送、系统卡片发送、消息已读、未读数变化、会话归档或屏蔽。 |
+| Order Events | 订单创建、金额冻结、商品占用、卖家确认、卖家拒绝、订单取消、完成确认请求、买家确认、买家异议、超时确认、进入完成待结算、结算冻结期到期、订单完成。 |
+| Payment Events | 支付单创建、支付成功、支付失败、资金托管、支付回调处理、结算记录创建、结算尝试创建、结算完成、结算失败。 |
+| Refund Events | 退款申请、退款同意、退款拒绝、部分退款完成、全额退款完成。 |
+| Review Credit Events | 评价提交、信用变化、信用摘要更新、人工修正。 |
+| Governance Events | 举报提交、举报处理、申诉提交、申诉复核、责任记录、处罚记录。 |
+| Audit Analytics Events | 通知发送、管理员操作记录、敏感数据访问记录、统计视图刷新。 |
+
+## 数据一致性契约
+
+### 身份权限
+
+- 校园认证至少包含姓名和学号两个基础因子。
+- 校园认证可信度采用 100 分制：姓名学号 40 分，院系信息 10 分，校园邮箱验证 10 分，学生证或校园卡材料审核通过 40 分。
+- 可信度达到 50 分进入管理员审核队列；开放完整交易权限必须同时满足可信度达到 60 分、至少一项证件类材料（学生证或校园卡）审核通过、管理员审核通过。
+- 校园认证通过后长期有效；身份异常举报成立后，管理员可以撤销认证或限制交易权限。
+- 未达到完整交易权限的用户不能发布商品、私信卖家、创建订单、支付订单或评价订单。
+- 用户公开信息不得暴露姓名、学号、手机号和认证材料。
+- 用户停用账号后，公开资料隐藏或匿名化，交易、支付、举报、信用和审计事实继续保留。
+- 校园邮箱必须匹配学校配置的后缀清单并完成链接验证，链接有效期为 30 分钟，邮箱在系统内唯一。
+- 学生证或校园卡材料通过审核后，姓名和学号组合不得被其他账号直接复用。
+- 管理员可以单项驳回认证因子；同一因子 24 小时内最多重提 3 次。
+- 校友标签不影响交易权限，系统不依赖毕业生名单运行。
+
+### 文件与隐私
+
+- 文件二进制不直接存入业务数据库，数据库只保存文件元数据和访问引用。
+- 商品图片只有在商品审核通过并公开上架后才能公开访问。
+- 私信图片、认证材料、举报证据、申诉材料、私信内容、支付异常材料和身份隐私资料按必要可见原则访问。
+- 管理员查看敏感材料时必须创建敏感访问日志，记录操作者、目标对象、访问原因、访问时间和访问结果。
+- 交易、支付、结算、退款、评价、信用、举报、申诉、处罚、审核、管理员操作和敏感访问等事实记录长期保留。
+
+### AI 与规则
+
+- AI 输入限制为商品标题、描述、成色、价格、分类和标签。
+- AI 输出包含类型、正文、理由、置信度、预检标签、来源商品和生成时间。
+- AI 输出不直接改变商品、订单、举报、申诉、处罚或用户信用状态。
+- 规则服务是默认主路径；LLM 是可选优化项；模拟服务、规则服务和规则加 LLM 服务共享同一输出契约。
+- 每次 AI 或规则处理必须先形成任务记录，再形成一个或多个结果记录。
+- `IntelligenceProvider` 统一适配模拟服务、规则服务和 LLM 服务。
+- AI 任务采用异步模型，30 秒未返回视为失败，同一任务最多自动重试 2 次。
+- 单商品同类发布辅助任务每日上限为 5 次；AI 结果 24 小时未采纳即过期。
+- AI 全局开关关闭后，AI 入口不可用但业务主流程继续运行。
+
+### 会话与推荐
+
+- 会话和消息记录以数据库为唯一事实来源。
+- 聊天消息采用 PostgreSQL 持久化表保存，核心表包括会话、消息和消息附件，并通过索引支撑按会话、参与者和时间范围查询。
+- 私信支持文本、图片和系统卡片；图片消息必须关联文件元数据，并按会话参与关系控制访问。
+- 系统卡片类型包括议价卡片、面交安排卡片、订单卡片、支付提示卡片、退款进度卡片、完成确认卡片和系统通知卡片。
+- 系统卡片只能由后端生成并持久化，前端不能伪造卡片。
+- 消息必须先持久化，再通过 WebSocket 推送给在线参与者。
+- WebSocket 推送失败不能删除或回滚已保存消息。
+- 商品搜索采用 PostgreSQL 全文检索、`pg_trgm` 模糊匹配和常规索引，不要求独立搜索服务。
+- 地点筛选基于校园地点字典，不保存实时定位轨迹，不提供附近的人能力。
+- 推荐只能使用商品特征、浏览、搜索、分类点击、收藏、下单、成交、评价和卖家信用等可解释数据。
+- 私信正文、举报材料、申诉材料、认证材料和身份隐私资料不得进入推荐评分。
+
+### 订单与商品占用
+
+- 一个订单的买家和卖家不能是同一用户。
+- 创建订单前必须确认买家具备完整交易权限、买家不是卖家、商品处于在售状态且商品没有占用性订单。
+- 创建订单必须和商品占用在同一事务或等价原子操作中完成。
+- 商品占用采用 PostgreSQL 行级锁保护，商品记录保留当前占用订单引用并与订单状态双向校验。
+- 同一商品同一时间只能被一个占用性订单占用。
+- 卖家拒绝、买家取消、支付超时、订单关闭或未结算退款完成时，必须释放商品占用。
+- 买家确认交易完成并进入结算链后，商品进入已售状态；已售商品不能再次被下单。
+- 面交地点以校园地点字典为基础，并允许补充具体位置描述。
+- 面交确认码只作为辅助凭证，不单独触发结算。
+- 面交出发、到达或开始等过程只作为会话卡片、通知或状态历史事件，不引入“交易中”订单状态。
+- 订单已取消表示买卖任一方在已支付待面交前主动放弃；订单已关闭表示系统因超时、异常、全额退款或管理员动作被动结束。
+- 已支付订单不能被买卖双方直接取消，只能通过退款、纠纷或管理员处理结束。
+
+### 金额与支付
+
+- 金额使用定点数，不使用浮点数表达交易价格。
+- 商品标价是挂牌价；买家下单可使用协商价，卖家确认订单即接受该订单冻结金额。
+- 协商价必须来自已接受议价卡片；同一会话以最后一次已接受议价卡片为准。
+- 议价卡片有效期为 24 小时，订单生成后该订单关闭前不允许继续发起同商品议价卡片。
+- 创建订单时必须保存订单冻结金额；商品当前标价不能覆盖既有订单冻结金额。
+- 支付单只能基于卖家已确认且仍然占用商品的订单创建。
+- 支付单金额必须等于订单冻结金额，不能由前端参数、商品当前标价或支付渠道回调覆盖。
+- 一个订单同一时间只能存在一个有效待支付或支付中支付单。
+- 支付成功必须通过支付单状态确认，不能只依赖前端跳转结果。
+- 支付回调必须幂等处理，重复回调不能重复改变订单或资金状态。
+- 模拟支付渠道与真实支付适配器使用同类幂等处理入口。
+- 支付成功表示资金进入托管状态，不表示卖家已收款。
+- 系统不提供平台余额或钱包；资金事实以订单、支付单、退款单和结算记录表达。
+- 卖家提交商品审核前必须绑定收款方式；同一卖家可绑定多个收款方式，但同一时刻只能有一个默认收款方式。
+- 订单创建时必须保存卖家当时默认收款方式的订单级快照；该快照只用于争议溯源，不因卖家后续更新收款方式而改写。
+- 结算记录必须保存订单、支付单、应结算金额、结算冻结期开始时间、结算冻结期结束时间、状态和失败原因。
+- 每次结算执行或重试必须创建独立结算尝试，保存尝试金额、尝试流水号、尝试时间、尝试状态、失败原因和尝试时卖家当前收款方式快照。
+
+### 面交、结算与退款
+
+- 买家确认完成是卖家结算的主触发。
+- 卖家只能在约定面交时间后发起完成确认请求。
+- 完成确认请求必须记录订单、卖家、买家、窗口开始时间、窗口结束时间、通知记录和处理状态。
+- 完成确认请求创建后，买家确认窗口为 48 小时；系统立即发送通知，并在请求创建后 24 小时提醒一次。
+- 确认窗口内存在有效退款申请、纠纷、订单相关举报处理或管理员冻结时，系统不得触发超时确认。
+- 超时确认任务必须幂等，重复执行不能重复推进订单状态或重复创建结算记录。
+- 订单进入已完成待结算时创建待结算记录并设置 7 天结算冻结期截止时间；冻结期内不得划拨托管资金。
+- 冻结期内交易任一方可以发起常规退款；退款处理中、纠纷处理中、订单相关举报处理或管理员冻结时，自动结算必须被阻断。
+- 结算冻结期到期任务必须幂等，重复执行不能重复创建结算尝试或重复推进资金状态。
+- 结算服务只能在订单处于已完成待结算、冻结期已到期且无有效阻断时创建结算尝试。
+- 结算重试必须生成新的结算尝试和新的尝试级收款方式快照，不能改写订单级收款方式快照。
+- 退款必须关联原支付单和订单，并记录退款原因、金额、状态和处理时间。
+- 退款支持全额退款和部分退款；同一支付单的累计退款金额不得超过可退金额。
+- 卖家可以同意退款；双方存在争议时，由管理员基于交易和治理材料裁决。
+- 部分退款不修改订单冻结金额或支付单金额；全额退款完成后相关支付单不得再进入卖家结算。
+- 退款金额不直接等同于纠纷责任，也不能直接自动改变用户信用。
+- 卖家响应退款申请时限为 48 小时，超时未拒绝视为同意退款。
+
+### 评价、治理与统计
+
+- 订单完成前不得创建评价。
+- 全额退款且订单关闭时不开放评价；部分退款后订单仍完成并结算时允许评价。
+- 评价包含 1-5 星整数评分、预设标签和可选文本；文本上限为 500 字符。
+- 评价在双方都提交或评价窗口关闭后公开，公开信息不包含评价方真实姓名。
+- 评价提交后 72 小时内可修改；管理员可在举报成立后隐藏评价并将其排除出信用聚合。
+- 信用变化只能来自订单完成、结构化评价、履约事实、举报成立、处罚记录、纠纷责任、申诉结果和人工修正。
+- 对外信用摘要只展示维度摘要和具名行为标签，不展示单一聚合信用分。
+- 对内可以保留数值或等级，用于排序、风控阈值和审计；每次数值或等级变化必须记录来源业务、关联对象、原因和时间。
+- 评价文本、私信内容、AI 预检标签、退款金额和未成立举报不能直接改变信用。
+- 举报类型覆盖商品、留言、消息、订单和账号；举报人对被举报方默认匿名，管理员可见双方身份。
+- 同一举报人对同一对象 24 小时内重复提交应合并处理；同一对象短时间内被多名用户举报时进入高优先级队列。
+- 举报受理时限为 72 小时，超时进入超级管理员复核队列。
+- 恶意举报累计达到治理阈值后，可限制举报权限。
+- 处罚类型包括警告、商品下架、限制发布、限制交易、认证失效和账号禁用，必须保留原因、依据、处理人和时间。
+- 商品删除优先使用逻辑删除，保留历史交易关联。
+- 后台统计以 PostgreSQL 视图、索引和聚合查询为主；查询成本较高的统计可以使用物化视图或定时刷新表。
+- 统计结果不反向修改订单、支付、商品、信用、举报、处罚或审核记录。
+
+### 时间窗口
+
+| 场景 | 默认时长 | 超时行为 |
+| --- | --- | --- |
+| 卖家确认订单 | 24 小时 | 订单关闭，释放商品占用，通知双方。 |
+| 买家支付订单 | 24 小时 | 关闭有效支付单，订单关闭，释放商品占用。 |
+| 买家响应完成确认 | 48 小时 | 无有效阻断时进入已完成待结算。 |
+| 完成待结算冻结期 | 订单进入已完成待结算后 7 天 | 无有效阻断时自动发起结算，之后常规退款入口关闭。 |
+| 退款申请入口 | 订单进入已完成待结算后 7 天 | 冻结期内开放常规退款；已发起退款继续处理；已结算争议进入申诉与人工处理。 |
+| 卖家响应退款申请 | 48 小时 | 未拒绝视为同意退款。 |
+| 评价开放 | 订单完成后 14 天 | 关闭评价入口，已提交评价不受影响。 |
+| 评价修改 | 提交后 72 小时 | 超时不可修改。 |
+| 消息撤回 | 发送后 2 分钟 | 超时不可撤回，系统卡片不可撤回。 |
+| 议价卡片 | 创建后 24 小时 | 过期不可接受。 |
+| 商品草稿 | 30 天未提交审核 | 转归档；90 天后可清理。 |
+| 浏览与搜索明细 | 90 天 | 转聚合统计或删除明细。 |
+| 离线消息补偿 | 7 天 | 更早消息通过分页历史查询。 |
+| 文件预签名 URL | 商品图 1 小时，私信图 15 分钟，敏感材料 5 分钟 | 过期重新签发。 |
+
+### 容量与格式限制
+
+| 场景 | 限制 |
+| --- | --- |
+| 商品图片 | 1-15 张，第一张为主图，单图不超过 10 MB，格式为 JPEG、PNG 或 WebP。 |
+| 商品标题 | 5-50 字符。 |
+| 商品描述 | 10-2000 字符。 |
+| 私信文本 | 单条不超过 2000 字符。 |
+| 私信图片 | 单条 1 张，可连续发送，单图不超过 10 MB，格式同商品图。 |
+| 留言 | 单条不超过 500 字符。 |
+| 评价文本 | 不超过 500 字符。 |
+| 举报材料 | 描述不超过 1000 字符，证据图最多 5 张。 |
+| 申诉材料 | 描述不超过 2000 字符，证据图最多 10 张。 |
+| 认证材料 | 学生证或校园卡正反面合计 2 张，单图不超过 10 MB。 |
+| 历史消息查询 | 全量保留，前端分页加载，默认每页 30 条。 |
+
+### 安全与配置
+
+- 登录态通过 HttpOnly Cookie 承载，服务端 `UserSession` 保存最后活跃时间和绝对过期时间，WebSocket 握手复用同一登录态。
+- 密码使用 bcrypt 或 Argon2id 等安全算法加密存储。
+- 登录、注册、认证提交、支付单创建、AI 调用、通用读写接口必须具备限流策略。
+- 文件上传必须校验大小、MIME 类型和文件头。
+- Cookie 登录态启用 CSRF 防护，公网部署强制 HTTPS。
+- 受保护请求隐式刷新会话最后活跃时间，默认闲置 7 天失效、绝对 30 天强制重新登录；会话状态探针只返回当前用户、权限和登录态，不签发新 token。
+- 初始超级管理员、学校信息、校区院系、邮箱后缀、商品分类标签、校园地点字典、举报类型、处罚类型和禁售词典通过种子脚本初始化。
+- 系统配置表保存可信度阈值、时间窗口、容量限制和 AI 开关等业务配置，配置变更必须留痕。

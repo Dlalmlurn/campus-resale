@@ -1,0 +1,48 @@
+server:
+  port: ${CAMPUS_RESALE_SERVER_PORT:8080}
+
+spring:
+  application:
+    name: campus-resale-api
+  datasource:
+    url: ${CAMPUS_RESALE_DB_URL:jdbc:postgresql://localhost:5432/campus_resale}
+    username: ${CAMPUS_RESALE_DB_USERNAME:campus_resale}
+    password: ${CAMPUS_RESALE_DB_PASSWORD:campus_resale_dev_password}
+    hikari:
+      maximum-pool-size: ${CAMPUS_RESALE_DB_POOL_SIZE:10}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  threads:
+    virtual:
+      enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+campus-resale:
+  security:
+    # 公网 HTTPS 部署应设为 true，使登录 Cookie 带 Secure，仅经加密连接回传。
+    cookie-secure: ${CAMPUS_RESALE_COOKIE_SECURE:false}
+  cors:
+    allowed-origins: ${CAMPUS_RESALE_CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}
+  storage:
+    endpoint: ${CAMPUS_RESALE_STORAGE_ENDPOINT:http://localhost:9000}
+    bucket: ${CAMPUS_RESALE_STORAGE_BUCKET:campus-resale-dev}
+    access-key: ${CAMPUS_RESALE_STORAGE_ACCESS_KEY:campus_resale_minio}
+    secret-key: ${CAMPUS_RESALE_STORAGE_SECRET_KEY:campus_resale_minio_password}
+  ai:
+    # AI 发布辅助的 LLM 接入。未配置 api-key 时自动退回稳健规则引擎，演示与离线均可用。
+    enabled: ${CAMPUS_RESALE_AI_ENABLED:false}
+    provider: ${CAMPUS_RESALE_AI_PROVIDER:deepseek}
+    base-url: ${CAMPUS_RESALE_AI_BASE_URL:https://api.deepseek.com}
+    api-key: ${CAMPUS_RESALE_AI_API_KEY:}
+    model: ${CAMPUS_RESALE_AI_MODEL:deepseek-chat}
+    timeout-ms: ${CAMPUS_RESALE_AI_TIMEOUT_MS:6000}

@@ -1,0 +1,15 @@
+{
+    email 2072225311@qq.com
+}
+
+# 显式处理 HTTP 4342 到 HTTPS 4343 的重定向
+http://91666.icu:4342 {
+    redir https://91666.icu:4343{uri}
+}
+
+https://91666.icu:4343 {
+    tls internal
+    encode gzip zstd
+    reverse_proxy /api/* backend:8080
+    reverse_proxy frontend:80
+}
