@@ -40,7 +40,7 @@ public class UserAccountRepository {
     public Optional<UserAccount> findByUsername(String normalizedUsername) {
         // normalizedUsername 已在 AuthService 中转小写；这里仍用 lower(username) 兼容历史数据。
         List<UserAccount> users = jdbcTemplate.query("""
-                        SELECT id, username, password_hash, nickname, account_status
+                        SELECT id, username, password_hash, nickname, avatar_file_id, account_status
                         FROM users
                         WHERE lower(username) = ?
                         """,
@@ -58,7 +58,7 @@ public class UserAccountRepository {
     public Optional<UserAccount> findById(long userId) {
         // Filter 根据 session.user_id 反查用户时走这里。
         List<UserAccount> users = jdbcTemplate.query("""
-                        SELECT id, username, password_hash, nickname, account_status
+                        SELECT id, username, password_hash, nickname, avatar_file_id, account_status
                         FROM users
                         WHERE id = ?
                         """,
@@ -75,7 +75,7 @@ public class UserAccountRepository {
     public Optional<UserAccount> findActiveByPersonalEmail(String email) {
         // 邮箱匹配大小写不敏感；只允许 ACTIVE 账号进入找回流程。
         List<UserAccount> users = jdbcTemplate.query("""
-                        SELECT id, username, password_hash, nickname, account_status
+                        SELECT id, username, password_hash, nickname, avatar_file_id, account_status
                         FROM users
                         WHERE lower(personal_email) = ?
                           AND account_status = 'ACTIVE'
@@ -193,6 +193,22 @@ public class UserAccountRepository {
     }
 
     /**
+     * 更新用户头像文件引用；头像文件本身由 files 模块负责存储和访问控制。
+     */
+    public void updateAvatarFileId(long userId, long avatarFileId, Instant now) {
+        jdbcTemplate.update("""
+                        UPDATE users
+                        SET avatar_file_id = ?,
+                            updated_at = ?
+                        WHERE id = ?
+                        """,
+                avatarFileId,
+                Timestamp.from(now),
+                userId
+        );
+    }
+
+    /**
      * 更新账号状态；DISABLED 会同时写 disabled_at，ACTIVE/LOCKED 会清空 disabled_at。
      */
     public void updateAccountStatus(long userId, String accountStatus, Instant now) {
@@ -301,6 +317,7 @@ public class UserAccountRepository {
                 userAccount.username(),
                 userAccount.passwordHash(),
                 userAccount.nickname(),
+                userAccount.avatarFileId(),
                 userAccount.accountStatus(),
                 roles
         );
@@ -383,9 +400,15 @@ public class UserAccountRepository {
                     resultSet.getString("username"),
                     resultSet.getString("password_hash"),
                     resultSet.getString("nickname"),
+                    nullableLong(resultSet, "avatar_file_id"),
                     resultSet.getString("account_status"),
                     Set.of()
             );
+        }
+
+        private Long nullableLong(ResultSet resultSet, String column) throws SQLException {
+            long value = resultSet.getLong(column);
+            return resultSet.wasNull() ? null : value;
         }
     }
 

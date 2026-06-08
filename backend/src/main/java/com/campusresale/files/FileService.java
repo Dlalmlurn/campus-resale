@@ -172,6 +172,17 @@ public class FileService {
         return record;
     }
 
+    public StoredFileRecord requireOwnedPublicAvatar(long fileId, long ownerUserId) {
+        StoredFileRecord record = fileRepository.findById(fileId)
+                .orElseThrow(() -> ApiExceptions.validation("头像文件不存在", Map.of("field", "avatarFileId")));
+        if (!Long.valueOf(ownerUserId).equals(record.ownerUserId())
+                || record.fileKind() != FileKind.AVATAR
+                || record.visibilityScope() != VisibilityScope.PUBLIC) {
+            throw ApiExceptions.validation("头像必须由当前用户上传并且为公开图片", Map.of("field", "avatarFileId"));
+        }
+        return record;
+    }
+
     private void requireMetadataAccess(StoredFileRecord record, Optional<CurrentPrincipal> principal) {
         if (record.visibilityScope() == VisibilityScope.PUBLIC) {
             return;

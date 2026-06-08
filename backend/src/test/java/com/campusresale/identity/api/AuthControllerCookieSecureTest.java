@@ -12,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.campusresale.identity.application.AuthResult;
 import com.campusresale.identity.application.AuthService;
 import com.campusresale.identity.application.SessionLookupService;
+import com.campusresale.files.FileService;
 import com.campusresale.platform.api.GlobalApiExceptionHandler;
 import com.campusresale.platform.security.AuthorizationInterceptor;
 import com.campusresale.platform.security.OriginCsrfInterceptor;
@@ -41,6 +42,9 @@ class AuthControllerCookieSecureTest {
     private AuthService authService;
 
     @MockBean
+    private FileService fileService;
+
+    @MockBean
     private OriginCsrfInterceptor originCsrfInterceptor;
 
     @MockBean
@@ -55,7 +59,7 @@ class AuthControllerCookieSecureTest {
     @Test
     void loginCookieCarriesSecureWhenEnabled() throws Exception {
         when(authService.login(any(), any(), any())).thenReturn(new AuthResult(
-                new CurrentUserResponse(1L, "student_demo", "认证学生演示账号", List.of("REGISTERED_USER", "VERIFIED_STUDENT"), "APPROVED", true),
+                new CurrentUserResponse(1L, "student_demo", "认证学生演示账号", null, List.of("REGISTERED_USER", "VERIFIED_STUDENT"), "APPROVED", true),
                 "raw-token",
                 604800
         ));

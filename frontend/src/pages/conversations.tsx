@@ -16,6 +16,7 @@ import {
 } from "../api/conversations";
 import { uploadFile } from "../api/m1";
 import { createOrder } from "../api/orders";
+import { ReportButton } from "../components/ReportButton";
 import type {
   BargainCardSummary,
   CampusPlaceSummary,
@@ -363,6 +364,7 @@ export function ConversationDetailPage(props: {
           <div className="conversation-actions">
             <span className="badge neutral">{isBuyer ? "我是买家" : "我是卖家"}</span>
             <button className="secondary-button compact" disabled={busy} type="button" onClick={() => void archive()}>{conversation.archived ? <ArchiveRestore size={15} /> : <Archive size={15} />}{conversation.archived ? "移出归档" : "归档"}</button>
+            <ReportButton currentUser={props.currentUser} targetType="GOODS" targetId={conversation.goodsId} notify={props.notify} />
             <button className="secondary-button compact danger-action" disabled={busy} type="button" onClick={() => void remove()}><Trash2 size={15} /> 删除</button>
             <button className="secondary-button compact danger-action" disabled={busy || conversation.status === "BLOCKED"} type="button" onClick={() => void block()}><Ban size={15} /> 屏蔽</button>
           </div>

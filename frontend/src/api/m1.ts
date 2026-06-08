@@ -87,7 +87,13 @@ export function submitVerification() {
   return apiRequest<CampusVerification>("/api/verifications/me/submit", { method: "POST" });
 }
 
-export function uploadFile(file: File, fileKind: "GOODS_IMAGE" | "CAMPUS_AUTH_MATERIAL" | "ORDER_EVIDENCE" | "REPORT_EVIDENCE" | "APPEAL_EVIDENCE" | "MESSAGE_IMAGE") {
+export function uploadAvatar(file: File) {
+  const body = new FormData();
+  body.set("file", file);
+  return apiRequest<CurrentUser>("/api/auth/me/avatar", { method: "POST", body });
+}
+
+export function uploadFile(file: File, fileKind: "AVATAR" | "GOODS_IMAGE" | "CAMPUS_AUTH_MATERIAL" | "ORDER_EVIDENCE" | "REPORT_EVIDENCE" | "APPEAL_EVIDENCE" | "MESSAGE_IMAGE") {
   const body = new FormData();
   body.set("file", file);
   body.set("fileKind", fileKind);

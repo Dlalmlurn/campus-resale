@@ -39,6 +39,10 @@ h2 { letter-spacing: 0; }
 .account-area { display: flex; align-items: center; gap: 10px; }
 .account-copy { text-align: right; }
 .account-copy strong { display: block; font-size: 0.88rem; }
+.avatar { display: block; width: 38px; height: 38px; border: 1px solid #cfe0d8; border-radius: 50%; object-fit: cover; background: #eef7f3; }
+.avatar.large { width: 74px; height: 74px; }
+.avatar.fallback { display: grid; place-items: center; color: var(--green-dark); font-size: 0.95rem; font-weight: 900; }
+.avatar.fallback.large { font-size: 1.55rem; }
 .demo-switcher { display: flex; gap: 4px; padding: 4px; border: 1px solid #d9e8e2; border-radius: 8px; background: #f7fbf9; }
 .demo-switcher button { min-height: 28px; padding: 0 8px; border: 0; border-radius: 6px; color: var(--green-dark); background: transparent; font-size: 0.74rem; font-weight: 800; }
 .demo-switcher button:hover { background: #fff; box-shadow: 0 1px 3px #243b3212; }
@@ -72,6 +76,7 @@ h2 { letter-spacing: 0; }
 .secondary-button { border: 1px solid #bdd2ca; color: var(--green-dark); background: #f5fbf8; }
 .text-button { min-height: 30px; justify-content: flex-start; padding: 0; border: 0; color: var(--green-dark); background: transparent; }
 .primary-button:disabled, .secondary-button:disabled, .text-button:disabled { cursor: not-allowed; opacity: 0.56; }
+.secondary-button.active, .favorite-button.active { border-color: #d85d68; color: #a83242; background: #fff0f2; }
 .full-width { width: 100%; }
 .button-row { display: flex; gap: 10px; }
 
@@ -91,6 +96,7 @@ h2 { letter-spacing: 0; }
 .goods-card-footer span { color: var(--muted); font-size: 0.82rem; }
 .goods-card-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 14px 14px; }
 .goods-card-actions .secondary-button { flex: 1 1 112px; min-width: 0; }
+main > section { animation: fadeInUp 180ms ease both; }
 
 .detail-layout { padding-top: 24px; }
 .back-button { margin-bottom: 14px; }
@@ -328,15 +334,41 @@ h2 { letter-spacing: 0; }
 .center-panel { min-height: 520px; }
 .center-panel h1, .center-panel p { margin-bottom: 0; }
 .state-block { grid-column: 1 / -1; min-height: 180px; border: 1px dashed #cad6d1; border-radius: 8px; background: #fafcfb; }
+.loading-block { min-height: 220px; }
+.loading-skeleton { display: grid; gap: 8px; width: min(320px, 82%); margin-top: 4px; }
+.loading-skeleton span { display: block; height: 10px; overflow: hidden; border-radius: 999px; background: #e3ebe7; }
+.loading-skeleton span::after { content: ""; display: block; width: 45%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, transparent, #ffffffbf, transparent); animation: shimmer 1.15s ease-in-out infinite; }
+.loading-skeleton span:nth-child(2) { width: 78%; justify-self: center; }
+.loading-skeleton span:nth-child(3) { width: 58%; justify-self: center; }
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes shimmer { from { transform: translateX(-120%); } to { transform: translateX(240%); } }
+@keyframes fadeInUp { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+.profile-overview { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 0.85fr); gap: 14px; margin-bottom: 14px; }
+.profile-identity, .profile-stats, .profile-column { border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.profile-identity { display: flex; align-items: center; gap: 16px; padding: 18px; }
+.profile-identity h2 { margin: 0 0 5px; font-size: 1.25rem; }
+.profile-identity p { margin: 0 0 12px; color: var(--muted); }
+.avatar-upload input { display: none; }
+.profile-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1px; overflow: hidden; }
+.profile-stat { display: grid; place-items: center; align-content: center; gap: 5px; min-height: 114px; background: #fbfdfc; }
+.profile-stat span { color: var(--muted); font-size: 0.76rem; font-weight: 800; }
+.profile-stat strong { color: var(--green-dark); font-size: 1.35rem; }
+.profile-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.profile-column { min-width: 0; padding: 14px; }
+.profile-column h2 { margin-bottom: 10px; font-size: 1rem; }
+.profile-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; width: 100%; min-height: 42px; padding: 9px 0; border: 0; border-top: 1px solid #e8eeeb; color: var(--ink); background: transparent; text-align: left; }
+.profile-row:first-of-type { border-top: 0; }
+.profile-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.profile-row strong { color: var(--green-dark); font-size: 0.78rem; }
 
 @media (max-width: 900px) {
   .app-header { grid-template-columns: 1fr auto; gap: 12px; }
   .main-nav { grid-column: 1 / -1; grid-row: 2; overflow-x: auto; padding-bottom: 8px; }
   .goods-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .detail-grid, .auth-layout, .two-column-layout, .seller-layout, .order-detail-grid, .conversation-detail-grid { grid-template-columns: 1fr; }
-  .admin-demo-guide, .log-filter-bar, .stat-grid { grid-template-columns: 1fr 1fr; }
+  .detail-grid, .auth-layout, .two-column-layout, .seller-layout, .order-detail-grid, .conversation-detail-grid, .profile-overview { grid-template-columns: 1fr; }
+  .admin-demo-guide, .log-filter-bar, .stat-grid, .profile-grid { grid-template-columns: 1fr 1fr; }
   .order-timeline { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .auth-layout { min-height: 0; padding-top: 44px; }
   .auth-intro h1 { font-size: 2.4rem; }
@@ -354,7 +386,7 @@ h2 { letter-spacing: 0; }
   .market-stat { display: none; }
   .search-toolbar, .market-filter-row { grid-template-columns: 1fr; }
   .goods-grid, .form-grid { grid-template-columns: 1fr; }
-  .admin-demo-guide, .admin-tabs--wide, .log-filter-bar, .stat-grid, .status-bar-row, .notification-row { grid-template-columns: 1fr; }
+  .admin-demo-guide, .admin-tabs--wide, .log-filter-bar, .stat-grid, .status-bar-row, .notification-row, .profile-stats, .profile-grid { grid-template-columns: 1fr; }
   .goods-image { height: 174px; }
   .goods-image.large { min-height: 280px; }
   .review-row { grid-template-columns: 1fr auto; }

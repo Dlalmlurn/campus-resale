@@ -19,6 +19,7 @@ import {
   simulatePayment
 } from "../api/orders";
 import { uploadFile } from "../api/m1";
+import { ReportButton } from "../components/ReportButton";
 import type {
   CompletionRequestSummary,
   CurrentUser,
@@ -243,6 +244,7 @@ export function OrderDetailPage(props: {
             onRequestCompletion={() => action(() => requestCompletion(order.id), "已发起完成确认")}
             onConfirmCompletion={() => action(() => confirmCompletion(order.id, completion!.id), "交易完成确认成功")}
           />
+          <ReportButton currentUser={props.currentUser} targetType="ORDER" targetId={order.id} notify={props.notify} />
           {canRefund && (
             <RefundForm
               busy={busy}

@@ -9,6 +9,7 @@ import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -17,6 +18,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.campusresale.identity.application.AuthResult;
 import com.campusresale.identity.application.AuthService;
 import com.campusresale.identity.application.SessionLookupService;
+import com.campusresale.files.FileKind;
+import com.campusresale.files.FileService;
+import com.campusresale.files.StoredFileSummary;
+import com.campusresale.files.VisibilityScope;
 import com.campusresale.platform.api.GlobalApiExceptionHandler;
 import com.campusresale.platform.security.AuthorizationInterceptor;
 import com.campusresale.platform.security.CurrentPrincipal;
@@ -34,6 +39,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(AuthController.class)
@@ -47,6 +53,9 @@ class AuthControllerTest {
 
     @MockBean
     private AuthService authService;
+
+    @MockBean
+    private FileService fileService;
 
     @MockBean
     private OriginCsrfInterceptor originCsrfInterceptor;
@@ -183,11 +192,50 @@ class AuthControllerTest {
         verify(authService).deleteOwnAccount(principal, "520zikejiang");
     }
 
+    @Test
+    void updateAvatarUploadsPublicAvatarAndReturnsCurrentUser() throws Exception {
+        CurrentPrincipal principal = new CurrentPrincipal(
+                1L,
+                "student_demo",
+                "认证学生演示账号",
+                "ACTIVE",
+                Set.of("REGISTERED_USER"),
+                10L,
+                Instant.now().plusSeconds(60),
+                Instant.now().plusSeconds(120)
+        );
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "avatar.png",
+                "image/png",
+                new byte[]{(byte) 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a}
+        );
+        when(fileService.upload(any(), eq(FileKind.AVATAR), eq(VisibilityScope.PUBLIC), eq(principal)))
+                .thenReturn(new StoredFileSummary(44L, "avatar.png", "image/png", 8L, "AVATAR", "PUBLIC", "PENDING", Instant.now()));
+        when(authService.updateAvatar(principal, 44L)).thenReturn(new CurrentUserResponse(
+                1L,
+                "student_demo",
+                "认证学生演示账号",
+                "/api/files/44/content",
+                List.of("REGISTERED_USER"),
+                "APPROVED",
+                true
+        ));
+
+        mockMvc.perform(multipart("/api/auth/me/avatar")
+                        .file(file)
+                        .header(HttpHeaders.ORIGIN, LOCAL_ORIGIN)
+                        .requestAttr(CurrentPrincipalContext.REQUEST_ATTRIBUTE, principal))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.avatarUrl").value("/api/files/44/content"));
+    }
+
     private CurrentUserResponse currentUser() {
         return new CurrentUserResponse(
                 1L,
                 "student_demo",
                 "认证学生演示账号",
+                null,
                 List.of("REGISTERED_USER", "VERIFIED_STUDENT"),
                 "APPROVED",
                 true

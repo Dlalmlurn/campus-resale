@@ -34,6 +34,7 @@ public class CurrentUserMapper {
                 userAccount.id(),
                 userAccount.username(),
                 userAccount.nickname(),
+                userAccount.avatarFileId(),
                 userAccount.roles()
         );
     }
@@ -49,6 +50,7 @@ public class CurrentUserMapper {
                 principal.id(),
                 principal.username(),
                 principal.nickname(),
+                null,
                 principal.roles()
         );
     }
@@ -62,13 +64,14 @@ public class CurrentUserMapper {
      * @param roleSet 用户角色集合。
      * @return 排序后的角色列表和认证交易状态。
      */
-    private CurrentUserResponse toResponse(long id, String username, String nickname, java.util.Set<String> roleSet) {
+    private CurrentUserResponse toResponse(long id, String username, String nickname, Long avatarFileId, java.util.Set<String> roleSet) {
         // 复制成 List 后排序，保证接口响应稳定，方便前端比较和测试断言。
         List<String> roles = new ArrayList<>(roleSet);
         roles.sort(Comparator.naturalOrder());
 
         CampusTradeEligibility eligibility = campusTradeEligibilityResolver.resolve(id, roleSet);
+        String avatarUrl = avatarFileId == null ? null : "/api/files/" + avatarFileId + "/content";
 
-        return new CurrentUserResponse(id, username, nickname, roles, eligibility.verificationStatus(), eligibility.canTrade());
+        return new CurrentUserResponse(id, username, nickname, avatarUrl, roles, eligibility.verificationStatus(), eligibility.canTrade());
     }
 }

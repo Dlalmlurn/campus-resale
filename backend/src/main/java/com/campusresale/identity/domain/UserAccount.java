@@ -15,6 +15,8 @@ public record UserAccount(
         String passwordHash,
         /** 用户展示昵称，对应 users.nickname。 */
         String nickname,
+        /** 当前头像文件 id，对应 users.avatar_file_id；为空时前端展示默认头像。 */
+        Long avatarFileId,
         /** 账号状态，对应 users.account_status；只有 ACTIVE 允许登录和使用 session。 */
         String accountStatus,
         /** 用户拥有的角色 code 集合，例如 REGISTERED_USER、VERIFIED_STUDENT。 */

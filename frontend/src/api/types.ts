@@ -9,6 +9,7 @@ export interface CurrentUser {
   id: number;
   username: string;
   nickname: string;
+  avatarUrl?: string | null;
   roles: string[];
   verificationStatus: string;
   canTrade: boolean;

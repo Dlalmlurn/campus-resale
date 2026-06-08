@@ -13,6 +13,8 @@ public record CurrentUserResponse(
         String username,
         /** 前端展示昵称。 */
         String nickname,
+        /** 当前头像公开访问地址；未设置头像时为 null。 */
+        String avatarUrl,
         /** 当前用户角色 code 列表，已排序方便前端稳定展示。 */
         List<String> roles,
         /** 校园认证状态；由校园认证记录解析，未提交认证时为 NONE。 */

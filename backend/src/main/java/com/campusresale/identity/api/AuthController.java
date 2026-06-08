@@ -8,6 +8,9 @@ import com.campusresale.identity.api.AuthRequests.PasswordResetRequest;
 import com.campusresale.identity.api.AuthRequests.RegisterRequest;
 import com.campusresale.identity.application.AuthResult;
 import com.campusresale.identity.application.AuthService;
+import com.campusresale.files.FileKind;
+import com.campusresale.files.FileService;
+import com.campusresale.files.VisibilityScope;
 import com.campusresale.platform.api.ApiExceptions;
 import com.campusresale.platform.security.CurrentPrincipal;
 import com.campusresale.platform.security.CurrentPrincipalContext;
@@ -19,11 +22,14 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * Auth API 控制器，提供注册、登录、退出、当前用户查询、密码找回和自助注销接口。
@@ -38,6 +44,11 @@ public class AuthController {
     private final AuthService authService;
 
     /**
+     * 文件服务：当前只在头像上传时复用统一图片存储、校验和元数据记录。
+     */
+    private final FileService fileService;
+
+    /**
      * 是否在登录 Cookie 上追加 Secure 属性。
      * 公网 HTTPS 部署应通过 CAMPUS_RESALE_COOKIE_SECURE=true 打开，本地 HTTP 联调保持 false。
      */
@@ -48,9 +59,11 @@ public class AuthController {
      */
     public AuthController(
             AuthService authService,
+            FileService fileService,
             @Value("${campus-resale.security.cookie-secure:false}") boolean cookieSecure
     ) {
         this.authService = authService;
+        this.fileService = fileService;
         this.cookieSecure = cookieSecure;
     }
 
@@ -105,6 +118,21 @@ public class AuthController {
         CurrentPrincipal principal = CurrentPrincipalContext.get(servletRequest)
                 .orElseThrow(ApiExceptions::authRequired);
         return authService.currentUser(principal);
+    }
+
+    /**
+     * 上传并绑定当前用户头像；头像以 PUBLIC AVATAR 文件保存，便于商品、消息和个人页直接展示。
+     */
+    @RequireLogin
+    @PostMapping(value = "/me/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public CurrentUserResponse updateAvatar(
+            @RequestPart("file") MultipartFile file,
+            HttpServletRequest servletRequest
+    ) {
+        CurrentPrincipal principal = CurrentPrincipalContext.get(servletRequest)
+                .orElseThrow(ApiExceptions::authRequired);
+        var uploaded = fileService.upload(file, FileKind.AVATAR, VisibilityScope.PUBLIC, principal);
+        return authService.updateAvatar(principal, uploaded.id());
     }
 
     /**

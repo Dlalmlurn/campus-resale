@@ -30,7 +30,7 @@ import {
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError } from "./api/client";
 import { createConversation } from "./api/conversations";
-import { addFavorite, followUser } from "./api/governance";
+import { addFavorite, followUser, getGovernanceOverview, removeFavorite } from "./api/governance";
 import { assistGoods, type GoodsAssistResponse } from "./api/intelligence";
 import {
   createGoodsDraft,
@@ -50,9 +50,10 @@ import {
   submitGoods,
   submitVerification,
   updateVerification,
+  uploadAvatar,
   uploadFile
 } from "./api/m1";
-import { createOrder } from "./api/orders";
+import { createOrder, getOrders } from "./api/orders";
 import {
   getNotifications,
   getUnreadNotificationCount,
@@ -66,9 +67,11 @@ import type {
   CurrentUser,
   GoodsSummary,
   GoodsUpsertRequest,
+  OrderSummary,
   StoredFileSummary,
   TagSummary
 } from "./api/types";
+import { ReportButton } from "./components/ReportButton";
 import { OrderDetailPage, OrdersPage } from "./pages/orders";
 import { ConversationDetailPage, ConversationsPage } from "./pages/conversations";
 import { AdminDashboardPage } from "./pages/admin-dashboard";
@@ -85,6 +88,7 @@ type Route =
   | { name: "conversation"; id: number }
   | { name: "orders" }
   | { name: "order"; id: number }
+  | { name: "profile" }
   | { name: "notifications" }
   | { name: "auth" }
   | { name: "verification" }
@@ -144,6 +148,15 @@ const sellerStatusFilters: Array<{ value: string; label: string }> = [
   { value: "SOLD", label: "已售" },
   { value: "OFF_SHELF", label: "已下架" }
 ];
+const sellerDraftStorageKey = "campus-resale:seller-draft";
+const viewedGoodsStorageKey = "campus-resale:viewed-goods";
+
+type ViewedGoods = {
+  id: number;
+  title: string;
+  listPrice: string;
+  viewedAt: string;
+};
 
 export function App() {
   const [route, setRoute] = useState<Route>(() => parseRoute());
@@ -223,7 +236,7 @@ export function App() {
   }, [refreshGoods]);
 
   useEffect(() => {
-    if ((route.name === "orders" || route.name === "order" || route.name === "conversations" || route.name === "conversation" || route.name === "notifications" || route.name === "governance") && authChecked && currentUser === null) {
+    if ((route.name === "orders" || route.name === "order" || route.name === "conversations" || route.name === "conversation" || route.name === "profile" || route.name === "notifications" || route.name === "governance") && authChecked && currentUser === null) {
       notify("error", "请先登录后继续");
       navigate({ name: "auth" });
       return;
@@ -235,7 +248,7 @@ export function App() {
   }, [authChecked, currentUser, navigate, notify, route.name]);
 
   const guardedNavigate = (next: Route) => {
-    if (!currentUser && (next.name === "verification" || next.name === "seller" || next.name === "admin" || next.name === "orders" || next.name === "order" || next.name === "conversations" || next.name === "conversation" || next.name === "notifications" || next.name === "governance")) {
+    if (!currentUser && (next.name === "verification" || next.name === "seller" || next.name === "admin" || next.name === "orders" || next.name === "order" || next.name === "conversations" || next.name === "conversation" || next.name === "profile" || next.name === "notifications" || next.name === "governance")) {
       notify("error", "请先登录后继续");
       navigate({ name: "auth" });
       return;
@@ -288,6 +301,7 @@ export function App() {
           <NavButton active={route.name === "market"} icon={<Home size={17} />} label="商品" onClick={() => navigate({ name: "market" })} />
           <NavButton active={route.name === "conversations" || route.name === "conversation"} icon={<MessageSquareText size={17} />} label="消息" onClick={() => guardedNavigate({ name: "conversations" })} />
           <NavButton active={route.name === "orders" || route.name === "order"} icon={<ClipboardList size={17} />} label="订单" onClick={() => guardedNavigate({ name: "orders" })} />
+          <NavButton active={route.name === "profile"} icon={<UserRound size={17} />} label="我的" onClick={() => guardedNavigate({ name: "profile" })} />
           {currentUser && (
             <NavButton active={route.name === "notifications"} icon={<Bell size={17} />} label="通知" onClick={() => guardedNavigate({ name: "notifications" })} />
           )}
@@ -308,6 +322,7 @@ export function App() {
           )}
           {currentUser ? (
             <>
+              <Avatar user={currentUser} />
               <div className="account-copy">
                 <strong>{currentUser.nickname}</strong>
                 <small>{currentUser.canTrade ? "认证学生" : verificationStatusLabels[currentUser.verificationStatus] ?? currentUser.verificationStatus}</small>
@@ -358,6 +373,7 @@ export function App() {
         {route.name === "conversation" && currentUser && <ConversationDetailPage id={route.id} currentUser={currentUser} places={catalog.places} notify={notify} onBack={() => navigate({ name: "conversations" })} onOpenOrder={(id) => navigate({ name: "order", id })} />}
         {route.name === "orders" && currentUser && <OrdersPage currentUser={currentUser} notify={notify} onOpenOrder={(id) => navigate({ name: "order", id })} />}
         {route.name === "order" && currentUser && <OrderDetailPage id={route.id} currentUser={currentUser} notify={notify} onBack={() => navigate({ name: "orders" })} />}
+        {route.name === "profile" && currentUser && <ProfilePage currentUser={currentUser} onUserChange={setCurrentUser} notify={notify} navigate={navigate} />}
         {route.name === "notifications" && currentUser && <NotificationsPage notify={notify} onOpenOrder={(id) => navigate({ name: "order", id })} />}
         {route.name === "auth" && <AuthPage currentUser={currentUser} onAuthenticated={setCurrentUser} navigate={navigate} notify={notify} />}
         {route.name === "verification" && currentUser && <VerificationPage currentUser={currentUser} onUserChange={setCurrentUser} notify={notify} />}
@@ -393,6 +409,18 @@ function MarketPage(props: {
   onOpen: (id: number) => void;
   notify: Notify;
 }) {
+  const [favoriteIds, setFavoriteIds] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    if (!props.currentUser) {
+      setFavoriteIds(new Set());
+      return;
+    }
+    void getGovernanceOverview()
+      .then((overview) => setFavoriteIds(new Set(overview.favorites.map((item) => item.goodsId))))
+      .catch(() => setFavoriteIds(new Set()));
+  }, [props.currentUser]);
+
   const runCardAction = async (action: () => Promise<unknown>, success: string) => {
     if (!props.currentUser) {
       props.notify("error", "请先登录后继续");
@@ -404,6 +432,26 @@ function MarketPage(props: {
     } catch (error) {
       props.notify("error", messageOf(error));
     }
+  };
+
+  const toggleFavorite = async (item: GoodsSummary) => {
+    const favorited = favoriteIds.has(item.id);
+    await runCardAction(
+      async () => {
+        if (favorited) {
+          await removeFavorite(item.id);
+          setFavoriteIds((current) => {
+            const next = new Set(current);
+            next.delete(item.id);
+            return next;
+          });
+        } else {
+          await addFavorite(item.id);
+          setFavoriteIds((current) => new Set(current).add(item.id));
+        }
+      },
+      favorited ? "已取消收藏" : "已收藏商品"
+    );
   };
 
   return (
@@ -489,12 +537,12 @@ function MarketPage(props: {
             </button>
             <div className="goods-card-actions">
               <button
-                className="secondary-button compact"
+                className={`secondary-button compact favorite-button ${favoriteIds.has(item.id) ? "active" : ""}`}
                 type="button"
-                aria-label={`收藏 ${item.title}`}
-                onClick={() => void runCardAction(() => addFavorite(item.id), "已收藏商品")}
+                aria-label={`${favoriteIds.has(item.id) ? "取消收藏" : "收藏"} ${item.title}`}
+                onClick={() => void toggleFavorite(item)}
               >
-                <Heart size={16} /> 收藏
+                <Heart size={16} fill={favoriteIds.has(item.id) ? "currentColor" : "none"} /> {favoriteIds.has(item.id) ? "已收藏" : "收藏"}
               </button>
               <button
                 className="secondary-button compact"
@@ -505,6 +553,7 @@ function MarketPage(props: {
               >
                 <UserPlus size={16} /> 关注卖家
               </button>
+              <ReportButton currentUser={props.currentUser} targetType="GOODS" targetId={item.id} notify={props.notify} />
             </div>
           </article>
         ))}
@@ -527,10 +576,13 @@ function GoodsDetailPage(props: { id: number; catalog: Catalog; currentUser: Cur
 
   useEffect(() => {
     void getGoodsDetail(props.id)
-      .then(setItem)
+      .then((next) => {
+        setItem(next);
+        if (props.currentUser) recordViewedGoods(next);
+      })
       .catch((error) => props.notify("error", messageOf(error)))
       .finally(() => setLoading(false));
-  }, [props.id, props.notify]);
+  }, [props.currentUser, props.id, props.notify]);
 
   if (loading) return <LoadingBlock />;
   if (!item) return <EmptyBlock title="商品不存在或暂不可见" />;
@@ -623,6 +675,7 @@ function GoodsDetailPage(props: { id: number; catalog: Catalog; currentUser: Cur
             <button className="primary-button" type="button" onClick={openOrder}>立即下单</button>
             <button className="secondary-button" disabled={busy} type="button" onClick={() => void openConversation()}><MessageSquareText size={17} /> 联系卖家</button>
             <button className="secondary-button" type="button" onClick={() => props.navigate({ name: "orders" })}>查看我的订单</button>
+            <ReportButton currentUser={props.currentUser} targetType="GOODS" targetId={item.id} notify={props.notify} />
           </div>
           {orderOpen && (
             <form className="form-panel order-compose" onSubmit={(event) => void submitOrder(event)}>
@@ -825,18 +878,7 @@ function SellerPage(props: { catalog: Catalog; notify: Notify }) {
   const [busy, setBusy] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
   const [aiAdvice, setAiAdvice] = useState<GoodsAssistResponse | null>(null);
-  const [form, setForm] = useState<GoodsUpsertRequest>({
-    title: "",
-    description: "",
-    categoryId: null,
-    conditionLevel: "LIKE_NEW",
-    listPrice: "",
-    tradePlaceId: null,
-    tradePlaceDetail: "",
-    availableTimeText: "",
-    imageFileIds: [],
-    tagIds: []
-  });
+  const [form, setForm] = useState<GoodsUpsertRequest>(() => loadSellerDraft());
 
   const load = useCallback(async () => {
     try {
@@ -847,6 +889,10 @@ function SellerPage(props: { catalog: Catalog; notify: Notify }) {
   }, [props.notify, statusFilter]);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    saveSellerDraft(form);
+  }, [form]);
 
   const upload = async (file?: File) => {
     if (!file) return;
@@ -871,7 +917,8 @@ function SellerPage(props: { catalog: Catalog; notify: Notify }) {
       props.notify("success", "商品草稿已创建");
       setItems((current) => [created, ...current]);
       setFiles([]);
-      setForm({ title: "", description: "", categoryId: null, conditionLevel: "LIKE_NEW", listPrice: "", tradePlaceId: null, tradePlaceDetail: "", availableTimeText: "", imageFileIds: [], tagIds: [] });
+      clearSellerDraft();
+      setForm(emptyGoodsDraft());
     } catch (error) {
       props.notify("error", messageOf(error));
     } finally {
@@ -1198,8 +1245,158 @@ function AdminPage(props: { notify: Notify; navigate: (route: Route) => void }) 
   );
 }
 
+function ProfilePage(props: { currentUser: CurrentUser; onUserChange: (user: CurrentUser) => void; notify: Notify; navigate: (route: Route) => void }) {
+  const [favorites, setFavorites] = useState<Awaited<ReturnType<typeof getGovernanceOverview>>["favorites"]>([]);
+  const [follows, setFollows] = useState<Awaited<ReturnType<typeof getGovernanceOverview>>["follows"]>([]);
+  const [viewedGoods, setViewedGoods] = useState<ViewedGoods[]>([]);
+  const [myGoods, setMyGoods] = useState<GoodsSummary[]>([]);
+  const [orders, setOrders] = useState<OrderSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [overview, goodsPage, orderPage] = await Promise.all([
+        getGovernanceOverview(),
+        getMyGoods({ pageSize: 50 }),
+        getOrders({ pageSize: 50 })
+      ]);
+      setFavorites(overview.favorites);
+      setFollows(overview.follows);
+      setViewedGoods(loadViewedGoods());
+      setMyGoods(goodsPage.items);
+      setOrders(orderPage.items);
+    } catch (error) {
+      props.notify("error", messageOf(error));
+    } finally {
+      setLoading(false);
+    }
+  }, [props.notify]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const upload = async (file?: File) => {
+    if (!file) return;
+    setBusy(true);
+    try {
+      const user = await uploadAvatar(file);
+      props.onUserChange(user);
+      props.notify("success", "头像已更新");
+    } catch (error) {
+      props.notify("error", messageOf(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const bought = orders.filter((order) => order.buyer.id === props.currentUser.id);
+  const sold = orders.filter((order) => order.seller.id === props.currentUser.id);
+
+  return (
+    <section>
+      <section className="page-heading profile-heading">
+        <div>
+          <p className="eyebrow">个人中心</p>
+          <h1>我的</h1>
+          <p>查看个人资料、收藏关注、发布商品以及买卖订单。</p>
+        </div>
+        <button className="icon-button subtle" type="button" aria-label="刷新我的页" onClick={() => void load()}><RefreshCw size={17} /></button>
+      </section>
+      <section className="profile-overview">
+        <div className="profile-identity">
+          <Avatar user={props.currentUser} large />
+          <div>
+            <h2>{props.currentUser.nickname}</h2>
+            <p>{props.currentUser.username} · {props.currentUser.canTrade ? "认证学生" : verificationStatusLabels[props.currentUser.verificationStatus] ?? props.currentUser.verificationStatus}</p>
+            <label className="secondary-button compact avatar-upload">
+              上传头像
+              <input accept="image/jpeg,image/png,image/webp" disabled={busy} type="file" onChange={(event) => void upload(event.target.files?.[0])} />
+            </label>
+          </div>
+        </div>
+        <div className="profile-stats">
+          <MetricTile label="收藏" value={favorites.length} />
+          <MetricTile label="浏览" value={viewedGoods.length} />
+          <MetricTile label="关注" value={follows.length} />
+          <MetricTile label="发布" value={myGoods.length} />
+          <MetricTile label="买到 / 卖出" value={`${bought.length} / ${sold.length}`} />
+        </div>
+      </section>
+      {loading ? <LoadingBlock /> : (
+        <div className="profile-grid">
+          <ProfileColumn title="我的收藏" empty="暂无收藏商品">
+            {favorites.map((item) => (
+              <button className="profile-row" type="button" key={item.id} onClick={() => props.navigate({ name: "goods", id: item.goodsId })}>
+                <span>{item.goodsTitle}</span>
+                <strong>¥{item.goodsPrice}</strong>
+              </button>
+            ))}
+          </ProfileColumn>
+          <ProfileColumn title="我的关注" empty="暂无关注用户">
+            {follows.map((item) => (
+              <div className="profile-row" key={item.id}>
+                <span>{item.followedUser.nickname}</span>
+                <strong>#{item.followedUser.id}</strong>
+              </div>
+            ))}
+          </ProfileColumn>
+          <ProfileColumn title="最近浏览" empty="暂无浏览记录">
+            {viewedGoods.map((item) => (
+              <button className="profile-row" type="button" key={`${item.id}-${item.viewedAt}`} onClick={() => props.navigate({ name: "goods", id: item.id })}>
+                <span>{item.title}</span>
+                <strong>¥{item.listPrice}</strong>
+              </button>
+            ))}
+          </ProfileColumn>
+          <ProfileColumn title="我发布的" empty="暂无发布商品">
+            {myGoods.map((item) => (
+              <button className="profile-row" type="button" key={item.id} onClick={() => props.navigate({ name: "goods", id: item.id })}>
+                <span>{item.title}</span>
+                <strong>{goodsStatusLabels[item.status] ?? item.status}</strong>
+              </button>
+            ))}
+          </ProfileColumn>
+          <ProfileColumn title="我买到的" empty="暂无买入订单">
+            {bought.map((item) => (
+              <button className="profile-row" type="button" key={item.id} onClick={() => props.navigate({ name: "order", id: item.id })}>
+                <span>{item.goodsTitle}</span>
+                <strong>¥{item.frozenAmount}</strong>
+              </button>
+            ))}
+          </ProfileColumn>
+          <ProfileColumn title="我卖出的" empty="暂无卖出订单">
+            {sold.map((item) => (
+              <button className="profile-row" type="button" key={item.id} onClick={() => props.navigate({ name: "order", id: item.id })}>
+                <span>{item.goodsTitle}</span>
+                <strong>¥{item.frozenAmount}</strong>
+              </button>
+            ))}
+          </ProfileColumn>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function MetricTile(props: { label: string; value: string | number }) {
+  return <div className="profile-stat"><span>{props.label}</span><strong>{props.value}</strong></div>;
+}
+
+function ProfileColumn(props: { title: string; empty: string; children: React.ReactNode }) {
+  const items = Array.isArray(props.children) ? props.children.filter(Boolean) : props.children ? [props.children] : [];
+  return <section className="profile-column"><h2>{props.title}</h2>{items.length === 0 ? <p className="empty-line">{props.empty}</p> : props.children}</section>;
+}
+
 function NavButton(props: { active: boolean; icon: React.ReactNode; label: string; onClick: () => void }) {
   return <button className={`nav-button ${props.active ? "active" : ""}`} type="button" onClick={props.onClick}>{props.icon}<span>{props.label}</span></button>;
+}
+
+function Avatar({ user, large = false }: { user: CurrentUser; large?: boolean }) {
+  const initial = user.nickname.trim().slice(0, 1).toUpperCase() || user.username.slice(0, 1).toUpperCase();
+  return user.avatarUrl
+    ? <img className={`avatar ${large ? "large" : ""}`} src={user.avatarUrl} alt={`${user.nickname}头像`} />
+    : <span className={`avatar fallback ${large ? "large" : ""}`}>{initial}</span>;
 }
 
 function PageHeading(props: { eyebrow: string; title: string; text: string }) {
@@ -1226,7 +1423,13 @@ function ReviewActions(props: { disabled: boolean; onApprove: () => void; onReje
 }
 
 function LoadingBlock() {
-  return <div className="state-block"><RefreshCw className="spin" size={24} /><strong>加载中</strong></div>;
+  return (
+    <div className="state-block loading-block">
+      <RefreshCw className="spin" size={24} />
+      <strong>加载中</strong>
+      <div className="loading-skeleton" aria-hidden="true"><span /><span /><span /></div>
+    </div>
+  );
 }
 
 function EmptyBlock({ title }: { title: string }) {
@@ -1238,7 +1441,7 @@ function parseRoute(): Route {
   if (value.startsWith("goods/")) return { name: "goods", id: Number(value.split("/")[1]) };
   if (value.startsWith("conversations/")) return { name: "conversation", id: Number(value.split("/")[1]) };
   if (value.startsWith("orders/")) return { name: "order", id: Number(value.split("/")[1]) };
-  if (["market", "conversations", "orders", "notifications", "auth", "verification", "seller", "governance", "admin"].includes(value)) return { name: value as Route["name"] } as Route;
+  if (["market", "conversations", "orders", "profile", "notifications", "auth", "verification", "seller", "governance", "admin"].includes(value)) return { name: value as Route["name"] } as Route;
   return { name: "market" };
 }
 
@@ -1283,6 +1486,65 @@ function formatDate(value?: string | null) {
 
 function formatBytes(value: number) {
   return value < 1024 * 1024 ? `${Math.ceil(value / 1024)} KB` : `${(value / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function emptyGoodsDraft(): GoodsUpsertRequest {
+  return {
+    title: "",
+    description: "",
+    categoryId: null,
+    conditionLevel: "LIKE_NEW",
+    listPrice: "",
+    tradePlaceId: null,
+    tradePlaceDetail: "",
+    availableTimeText: "",
+    imageFileIds: [],
+    tagIds: []
+  };
+}
+
+function loadSellerDraft(): GoodsUpsertRequest {
+  try {
+    const raw = window.localStorage.getItem(sellerDraftStorageKey);
+    return raw ? { ...emptyGoodsDraft(), ...JSON.parse(raw) } : emptyGoodsDraft();
+  } catch {
+    return emptyGoodsDraft();
+  }
+}
+
+function saveSellerDraft(form: GoodsUpsertRequest) {
+  try {
+    window.localStorage.setItem(sellerDraftStorageKey, JSON.stringify(form));
+  } catch {
+    // 浏览器隐私模式或存储配额异常时，表单仍可正常提交。
+  }
+}
+
+function clearSellerDraft() {
+  try {
+    window.localStorage.removeItem(sellerDraftStorageKey);
+  } catch {
+    // 清理失败不影响草稿创建结果。
+  }
+}
+
+function loadViewedGoods(): ViewedGoods[] {
+  try {
+    const raw = window.localStorage.getItem(viewedGoodsStorageKey);
+    return raw ? JSON.parse(raw) as ViewedGoods[] : [];
+  } catch {
+    return [];
+  }
+}
+
+function recordViewedGoods(item: GoodsSummary) {
+  try {
+    const current = loadViewedGoods().filter((entry) => entry.id !== item.id);
+    const next = [{ id: item.id, title: item.title, listPrice: item.listPrice, viewedAt: new Date().toISOString() }, ...current].slice(0, 20);
+    window.localStorage.setItem(viewedGoodsStorageKey, JSON.stringify(next));
+  } catch {
+    // 最近浏览只是体验增强，存储失败不影响商品详情查看。
+  }
 }
 
 type Notify = (tone: "success" | "error", text: string) => void;

@@ -20,6 +20,7 @@ import com.campusresale.identity.domain.UserAccount;
 import com.campusresale.identity.infrastructure.PasswordResetTokenRepository;
 import com.campusresale.identity.infrastructure.UserAccountRepository;
 import com.campusresale.identity.infrastructure.UserSessionRepository;
+import com.campusresale.files.FileService;
 import com.campusresale.platform.api.ApiException;
 import com.campusresale.platform.security.CurrentPrincipal;
 import com.campusresale.platform.security.TokenHasher;
@@ -38,6 +39,7 @@ class AuthServiceTest {
     private final SessionTokenGenerator sessionTokenGenerator = org.mockito.Mockito.mock(SessionTokenGenerator.class);
     private final PasswordResetTokenGenerator passwordResetTokenGenerator = org.mockito.Mockito.mock(PasswordResetTokenGenerator.class);
     private final PasswordResetDeliveryService passwordResetDeliveryService = org.mockito.Mockito.mock(PasswordResetDeliveryService.class);
+    private final FileService fileService = org.mockito.Mockito.mock(FileService.class);
     private final TokenHasher tokenHasher = org.mockito.Mockito.mock(TokenHasher.class);
     private final CurrentUserMapper currentUserMapper = org.mockito.Mockito.mock(CurrentUserMapper.class);
 
@@ -49,6 +51,7 @@ class AuthServiceTest {
             sessionTokenGenerator,
             passwordResetTokenGenerator,
             passwordResetDeliveryService,
+            fileService,
             tokenHasher,
             currentUserMapper
     );
@@ -122,6 +125,7 @@ class AuthServiceTest {
                 1L,
                 "alice_2026",
                 "Alice",
+                null,
                 List.of("REGISTERED_USER"),
                 "NONE",
                 false
@@ -200,6 +204,7 @@ class AuthServiceTest {
                 userAccount.id(),
                 userAccount.username(),
                 userAccount.nickname(),
+                null,
                 List.copyOf(userAccount.roles()),
                 "NONE",
                 false
@@ -207,7 +212,7 @@ class AuthServiceTest {
     }
 
     private UserAccount userWithRoles(String username, String... roles) {
-        return new UserAccount(1L, username, "hash", "Test", "ACTIVE", Set.of(roles));
+        return new UserAccount(1L, username, "hash", "Test", null, "ACTIVE", Set.of(roles));
     }
 
     private CurrentPrincipal principalWithRoles(String... roles) {

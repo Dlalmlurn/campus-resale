@@ -12,6 +12,7 @@ import com.campusresale.identity.domain.UserAccount;
 import com.campusresale.identity.infrastructure.PasswordResetTokenRepository;
 import com.campusresale.identity.infrastructure.UserAccountRepository;
 import com.campusresale.identity.infrastructure.UserSessionRepository;
+import com.campusresale.files.FileService;
 import com.campusresale.platform.api.ApiException;
 import com.campusresale.platform.api.ApiExceptions;
 import com.campusresale.platform.security.CurrentPrincipal;
@@ -68,6 +69,9 @@ public class AuthService {
     /** 密码找回投递边界：当前用于演示日志，后续可接 SMTP。 */
     private final PasswordResetDeliveryService passwordResetDeliveryService;
 
+    /** 文件服务：用于校验头像文件归属和公开可见性。 */
+    private final FileService fileService;
+
     /** token 哈希工具：退出登录时把浏览器 token 转成数据库 hash。 */
     private final TokenHasher tokenHasher;
 
@@ -82,6 +86,7 @@ public class AuthService {
             SessionTokenGenerator sessionTokenGenerator,
             PasswordResetTokenGenerator passwordResetTokenGenerator,
             PasswordResetDeliveryService passwordResetDeliveryService,
+            FileService fileService,
             TokenHasher tokenHasher,
             CurrentUserMapper currentUserMapper
     ) {
@@ -92,6 +97,7 @@ public class AuthService {
         this.sessionTokenGenerator = sessionTokenGenerator;
         this.passwordResetTokenGenerator = passwordResetTokenGenerator;
         this.passwordResetDeliveryService = passwordResetDeliveryService;
+        this.fileService = fileService;
         this.tokenHasher = tokenHasher;
         this.currentUserMapper = currentUserMapper;
     }
@@ -152,7 +158,18 @@ public class AuthService {
      * 组装当前用户响应；这里不重新查库，直接使用 Filter 已识别出的当前主体。
      */
     public CurrentUserResponse currentUser(CurrentPrincipal principal) {
-        return currentUserMapper.fromPrincipal(principal);
+        return currentUserMapper.fromUser(userAccountRepository.findById(principal.id())
+                .orElseThrow(() -> ApiExceptions.notFound("账号不存在")));
+    }
+
+    /**
+     * 绑定当前用户头像：只允许使用本人上传的 PUBLIC AVATAR 文件。
+     */
+    @Transactional
+    public CurrentUserResponse updateAvatar(CurrentPrincipal principal, long avatarFileId) {
+        fileService.requireOwnedPublicAvatar(avatarFileId, principal.id());
+        userAccountRepository.updateAvatarFileId(principal.id(), avatarFileId, Instant.now());
+        return currentUser(principal);
     }
 
     /**

@@ -23,6 +23,7 @@ class CurrentUserMapperTest {
                 "student_demo",
                 "hash",
                 "认证学生演示账号",
+                44L,
                 "ACTIVE",
                 Set.of("REGISTERED_USER", "VERIFIED_STUDENT")
         );
@@ -33,6 +34,7 @@ class CurrentUserMapperTest {
 
         assertThat(response.verificationStatus()).isEqualTo("APPROVED");
         assertThat(response.canTrade()).isTrue();
+        assertThat(response.avatarUrl()).isEqualTo("/api/files/44/content");
     }
 
     @Test
@@ -42,6 +44,7 @@ class CurrentUserMapperTest {
                 "user_demo",
                 "hash",
                 "普通用户演示账号",
+                null,
                 "ACTIVE",
                 Set.of("REGISTERED_USER")
         );
@@ -52,5 +55,6 @@ class CurrentUserMapperTest {
 
         assertThat(response.verificationStatus()).isEqualTo("NONE");
         assertThat(response.canTrade()).isFalse();
+        assertThat(response.avatarUrl()).isNull();
     }
 }
