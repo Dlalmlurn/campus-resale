@@ -22,12 +22,13 @@ services:
       target: dev
     environment:
       CHOKIDAR_USEPOLLING: "true"
-      VITE_DEV_PROXY_TARGET: http://backend:8080
+      VITE_DEV_PROXY_TARGET: http://host.docker.internal:8080
+      VITE_ENABLE_DEMO_SWITCHER: ${VITE_ENABLE_DEMO_SWITCHER:-false}
     volumes:
       - ./frontend:/workspace
       - /workspace/node_modules
     ports: !override
-      - "${FRONTEND_DEV_PORT:-5173}:5173"
+      - "127.0.0.1:${FRONTEND_DEV_PORT:-5173}:5173"
 
 volumes:
   maven-repo:

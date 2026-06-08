@@ -76,6 +76,8 @@ import { AdminAuditLogsPage } from "./pages/admin-audit-logs";
 import { AdminFundsPage } from "./pages/admin-funds";
 import { GovernancePage } from "./pages/governance";
 
+const showDemoSwitcher = import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEMO_SWITCHER === "true";
+
 type Route =
   | { name: "market" }
   | { name: "goods"; id: number }
@@ -269,7 +271,7 @@ export function App() {
           )}
         </nav>
         <div className="account-area">
-          {import.meta.env.DEV && (
+          {showDemoSwitcher && (
             <div className="demo-switcher" aria-label="演示账号切换">
               <button type="button" onClick={() => void handleDemoLogin("buyer_demo")}>买家</button>
               <button type="button" onClick={() => void handleDemoLogin("seller_demo")}>卖家</button>

@@ -87,7 +87,7 @@ services:
         condition: service_started
 
   caddy:
-    image: caddy:2-alpine
+    image: docker.1ms.run/library/caddy:2-alpine
     restart: unless-stopped
     ports:
       - "4342:4342"
