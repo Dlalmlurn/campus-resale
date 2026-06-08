@@ -73,13 +73,15 @@ public class ConversationService {
         if (goods.status() != GoodsStatus.ON_SALE || goods.auditStatus() != GoodsAuditStatus.APPROVED) {
             throw ApiExceptions.conflict("商品当前不可联系", Map.of("status", goods.status().name()));
         }
-        long conversationId = conversationRepository.createOrGet(goods.id(), buyer.id(), goods.sellerId(), Instant.now());
+        Instant now = Instant.now();
+        long conversationId = conversationRepository.createOrGet(goods.id(), buyer.id(), goods.sellerId(), now);
+        conversationRepository.restoreVisibilityForParticipant(conversationId, buyer.id(), now);
         return detail(conversationId, buyer);
     }
 
-    public List<ConversationSummary> list(CurrentPrincipal principal) {
-        expireVisibleBargains(principal.id());
-        return conversationRepository.listByParticipant(principal.id())
+    public List<ConversationSummary> list(CurrentPrincipal principal, boolean archivedOnly) {
+        expireVisibleBargains(principal.id(), archivedOnly);
+        return conversationRepository.listByParticipant(principal.id(), archivedOnly)
                 .stream()
                 .map(ConversationSummary::from)
                 .toList();
@@ -121,6 +123,7 @@ public class ConversationService {
         Instant now = Instant.now();
         long messageId = conversationRepository.createTextMessage(conversation.id(), sender.id(), text, now);
         long receiverId = otherParticipant(conversation, sender.id());
+        conversationRepository.restoreVisibilityForParticipant(conversation.id(), receiverId, now);
         NotificationRecord notification = notificationService.notifyMessageReceived(receiverId, conversation.id(), conversation.goodsTitle());
         MessageResponse response = conversationRepository.findMessageById(messageId)
                 .map(record -> MessageResponse.from(record, List.of()))
@@ -146,6 +149,7 @@ public class ConversationService {
         conversationRepository.createMessageAttachments(messageId, fileIds);
         fileRepository.attachToBusiness(fileIds, "MESSAGE_ATTACHMENT", messageId);
         long receiverId = otherParticipant(conversation, sender.id());
+        conversationRepository.restoreVisibilityForParticipant(conversation.id(), receiverId, now);
         NotificationRecord notification = notificationService.notifyMessageReceived(receiverId, conversation.id(), conversation.goodsTitle());
         MessageRecord record = conversationRepository.findMessageById(messageId)
                 .orElseThrow(ApiExceptions::internalError);
@@ -178,6 +182,7 @@ public class ConversationService {
         String note = optionalText(request == null ? null : request.note(), MAX_BARGAIN_NOTE_LENGTH, "note", "议价备注最多 240 个字符");
         Instant now = Instant.now();
         long cardId = conversationRepository.createBargainCard(conversation.id(), buyer.id(), amount, note, now, now.plusSeconds(BARGAIN_TTL_SECONDS));
+        conversationRepository.restoreVisibilityForParticipant(conversation.id(), conversation.sellerId(), now);
         NotificationRecord notification = notificationService.notifyBargainOffered(conversation.sellerId(), conversation.id(), conversation.goodsTitle());
         BargainCardResponse response = conversationRepository.findBargainById(cardId)
                 .map(BargainCardResponse::from)
@@ -205,6 +210,7 @@ public class ConversationService {
             throw ApiExceptions.conflict("议价状态已变化，请刷新后重试", Map.of("cardId", card.id()));
         }
         long messageId = conversationRepository.createBargainDecisionMessageReturningId(conversation.id(), card.id(), "卖家已接受议价", now);
+        conversationRepository.restoreVisibilityForParticipant(conversation.id(), conversation.buyerId(), now);
         NotificationRecord notification = notificationService.notifyBargainAccepted(conversation.buyerId(), conversation.id(), conversation.goodsTitle());
         BargainCardResponse response = conversationRepository.findBargainById(card.id())
                 .map(BargainCardResponse::from)
@@ -229,6 +235,7 @@ public class ConversationService {
             throw ApiExceptions.conflict("议价状态已变化，请刷新后重试", Map.of("cardId", card.id()));
         }
         long messageId = conversationRepository.createBargainDecisionMessageReturningId(conversation.id(), card.id(), "卖家已拒绝议价", now);
+        conversationRepository.restoreVisibilityForParticipant(conversation.id(), conversation.buyerId(), now);
         NotificationRecord notification = notificationService.notifyBargainRejected(conversation.buyerId(), conversation.id(), conversation.goodsTitle());
         BargainCardResponse response = conversationRepository.findBargainById(card.id())
                 .map(BargainCardResponse::from)
@@ -256,6 +263,12 @@ public class ConversationService {
         return conversationRepository.findByIdForViewer(conversationId, principal.id())
                 .map(ConversationSummary::from)
                 .orElseThrow(() -> ApiExceptions.notFound("会话不存在或不可见"));
+    }
+
+    @Transactional
+    public void delete(long conversationId, CurrentPrincipal principal) {
+        requireParticipantForUpdate(conversationId, principal);
+        conversationRepository.deleteForParticipant(conversationId, principal.id(), Instant.now());
     }
 
     @Transactional
@@ -306,7 +319,7 @@ public class ConversationService {
     }
 
     private ConversationRecord requireParticipant(long conversationId, CurrentPrincipal principal) {
-        ConversationRecord conversation = conversationRepository.findById(conversationId)
+        ConversationRecord conversation = conversationRepository.findByIdForViewer(conversationId, principal.id())
                 .orElseThrow(() -> ApiExceptions.notFound("会话不存在或不可见"));
         if (conversation.buyerId() != principal.id() && conversation.sellerId() != principal.id()) {
             throw ApiExceptions.notFound("会话不存在或不可见");
@@ -315,7 +328,7 @@ public class ConversationService {
     }
 
     private ConversationRecord requireParticipantForUpdate(long conversationId, CurrentPrincipal principal) {
-        ConversationRecord conversation = conversationRepository.findByIdForUpdate(conversationId)
+        ConversationRecord conversation = conversationRepository.findByIdForViewerForUpdate(conversationId, principal.id())
                 .orElseThrow(() -> ApiExceptions.notFound("会话不存在或不可见"));
         if (conversation.buyerId() != principal.id() && conversation.sellerId() != principal.id()) {
             throw ApiExceptions.notFound("会话不存在或不可见");
@@ -404,8 +417,8 @@ public class ConversationService {
         ));
     }
 
-    private void expireVisibleBargains(long userId) {
-        conversationRepository.listByParticipant(userId)
+    private void expireVisibleBargains(long userId, boolean archivedOnly) {
+        conversationRepository.listByParticipant(userId, archivedOnly)
                 .forEach(conversation -> expireExpiredBargains(conversation.id()));
     }
 

@@ -240,6 +240,7 @@ h2 { letter-spacing: 0; }
 .review-form { display: grid; gap: 10px; padding-top: 12px; border-top: 1px solid var(--line); }
 
 .conversation-list { display: grid; gap: 10px; }
+.conversation-tabs { width: min(360px, 100%); margin-bottom: 14px; }
 .conversation-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; align-items: center; width: 100%; padding: 15px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: #fff; text-align: left; }
 .conversation-row:hover { border-color: #a9c7bc; box-shadow: 0 8px 20px #2f524614; }
 .conversation-row.unread { border-color: #e9c873; background: #fffdf6; }

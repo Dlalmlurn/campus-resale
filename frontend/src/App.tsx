@@ -258,7 +258,7 @@ export function App() {
         </button>
         <nav className="main-nav" aria-label="主要导航">
           <NavButton active={route.name === "market"} icon={<Home size={17} />} label="商品" onClick={() => navigate({ name: "market" })} />
-          <NavButton active={route.name === "conversations" || route.name === "conversation"} icon={<MessageSquareText size={17} />} label="会话" onClick={() => guardedNavigate({ name: "conversations" })} />
+          <NavButton active={route.name === "conversations" || route.name === "conversation"} icon={<MessageSquareText size={17} />} label="消息" onClick={() => guardedNavigate({ name: "conversations" })} />
           <NavButton active={route.name === "orders" || route.name === "order"} icon={<ClipboardList size={17} />} label="订单" onClick={() => guardedNavigate({ name: "orders" })} />
           {currentUser && (
             <NavButton active={route.name === "notifications"} icon={<Bell size={17} />} label="通知" onClick={() => guardedNavigate({ name: "notifications" })} />

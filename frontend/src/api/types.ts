@@ -237,6 +237,7 @@ export interface ConversationSummary {
   lastMessageAt?: string | null;
   unreadCount: number;
   archived: boolean;
+  deleted?: boolean;
   createdAt: string;
   updatedAt: string;
 }

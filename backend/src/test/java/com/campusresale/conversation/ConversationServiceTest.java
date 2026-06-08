@@ -63,7 +63,7 @@ class ConversationServiceTest {
     void createConversationReturnsExistingConversationDetail() {
         when(goodsRepository.findById(100L)).thenReturn(Optional.of(goods()));
         when(conversationRepository.createOrGet(eq(100L), eq(2L), eq(1L), any())).thenReturn(20L);
-        when(conversationRepository.findById(20L)).thenReturn(Optional.of(conversation()));
+        when(conversationRepository.findByIdForViewer(20L, 2L)).thenReturn(Optional.of(conversation()));
         when(conversationRepository.listMessages(20L)).thenReturn(List.of());
         when(conversationRepository.listBargains(20L)).thenReturn(List.of());
 
@@ -75,7 +75,7 @@ class ConversationServiceTest {
 
     @Test
     void sendTextRequiresParticipantAndNotifiesOtherSide() {
-        when(conversationRepository.findByIdForUpdate(20L)).thenReturn(Optional.of(conversation()));
+        when(conversationRepository.findByIdForViewerForUpdate(20L, 2L)).thenReturn(Optional.of(conversation()));
         when(conversationRepository.createTextMessage(eq(20L), eq(2L), eq("还在吗？"), any())).thenReturn(30L);
         when(conversationRepository.findMessageById(30L)).thenReturn(Optional.of(message()));
 
@@ -87,7 +87,7 @@ class ConversationServiceTest {
 
     @Test
     void buyerCreatesBargainCard() {
-        when(conversationRepository.findByIdForUpdate(20L)).thenReturn(Optional.of(conversation()));
+        when(conversationRepository.findByIdForViewerForUpdate(20L, 2L)).thenReturn(Optional.of(conversation()));
         when(goodsRepository.findById(100L)).thenReturn(Optional.of(goods()));
         when(conversationRepository.hasOpenOrderForGoods(100L)).thenReturn(false);
         when(conversationRepository.createBargainCard(eq(20L), eq(2L), eq(new BigDecimal("360.00")), eq("预算有限"), any(), any()))
@@ -106,7 +106,7 @@ class ConversationServiceTest {
 
     @Test
     void sellerAcceptsPendingBargain() {
-        when(conversationRepository.findByIdForUpdate(20L)).thenReturn(Optional.of(conversation()));
+        when(conversationRepository.findByIdForViewerForUpdate(20L, 1L)).thenReturn(Optional.of(conversation()));
         when(conversationRepository.findBargainByIdForUpdate(40L)).thenReturn(Optional.of(bargain("PENDING", null)));
         when(conversationRepository.hasOpenOrderForGoods(100L)).thenReturn(false);
         when(conversationRepository.markBargain(eq(40L), eq("ACCEPTED"), eq(1L), any())).thenReturn(1);
@@ -128,6 +128,15 @@ class ConversationServiceTest {
 
         assertThat(quote.conversationId()).isEqualTo(20L);
         assertThat(quote.amount()).isEqualByComparingTo("360.00");
+    }
+
+    @Test
+    void deleteHidesConversationForCurrentParticipant() {
+        when(conversationRepository.findByIdForViewerForUpdate(20L, 2L)).thenReturn(Optional.of(conversation()));
+
+        service.delete(20L, principal(2L));
+
+        verify(conversationRepository).deleteForParticipant(eq(20L), eq(2L), any());
     }
 
     private GoodsRecord goods() {
@@ -170,6 +179,7 @@ class ConversationServiceTest {
                 null,
                 null,
                 0,
+                null,
                 null,
                 Instant.parse("2026-06-01T00:00:00Z"),
                 Instant.parse("2026-06-01T00:00:00Z")

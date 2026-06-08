@@ -105,6 +105,22 @@ describe("App", () => {
     expect(screen.getByText("我是买家")).toBeInTheDocument();
   });
 
+  it("lets users switch between active and archived conversations", async () => {
+    stubBackend(verifiedBuyer);
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByText("买家同学")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "消息" }));
+
+    await waitFor(() => expect(screen.getByText("我的消息")).toBeInTheDocument());
+    expect(screen.getByText("机械键盘 87 键茶轴")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "已归档" }));
+
+    await waitFor(() => expect(screen.getByText("数据库原理教材")).toBeInTheDocument());
+    expect(screen.getAllByText("已归档").length).toBeGreaterThan(0);
+  });
+
   it("creates an order from goods detail and opens the order detail", async () => {
     stubBackend(verifiedBuyer);
     render(<App />);
@@ -243,6 +259,8 @@ function stubBackend(currentUser?: CurrentUser) {
     if (url === "/api/orders?page=1&pageSize=20") return response({ items: [pendingOrder()], page: 1, pageSize: 20, total: 1 });
     if (url === "/api/orders/77") return response(pendingOrder());
     if (url === "/api/orders/77/reviews") return response([]);
+    if (url === "/api/conversations") return response([conversationSummary(false)]);
+    if (url === "/api/conversations?archivedOnly=true") return response([conversationSummary(true)]);
     if (url === "/api/admin/stats/dashboard") return response(adminDashboard());
     if (url === "/api/admin/stats/order-trend") return response([
       { statDate: "2026-06-05", totalCreated: 3, completedCount: 1, cancelledCount: 0 }
@@ -436,6 +454,25 @@ function pendingOrder() {
     createdAt: "2026-06-05T10:00:00Z",
     updatedAt: "2026-06-05T10:00:00Z",
     closedAt: null
+  };
+}
+
+function conversationSummary(archived: boolean) {
+  return {
+    id: archived ? 81 : 80,
+    goodsId: archived ? 10 : 12,
+    goodsTitle: archived ? "数据库原理教材" : "机械键盘 87 键茶轴",
+    primaryImageFileId: null,
+    buyer: { id: 31, nickname: "买家同学" },
+    seller: { id: 11, nickname: "小林同学" },
+    status: "NORMAL",
+    lastMessageId: archived ? 91 : 90,
+    lastMessageText: archived ? "已归档的议价记录" : "今晚可以自取",
+    lastMessageAt: "2026-06-05T10:10:00Z",
+    unreadCount: archived ? 0 : 2,
+    archived,
+    createdAt: "2026-06-05T10:00:00Z",
+    updatedAt: "2026-06-05T10:10:00Z"
   };
 }
 

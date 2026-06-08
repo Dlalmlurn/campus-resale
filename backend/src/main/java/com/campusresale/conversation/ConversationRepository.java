@@ -32,6 +32,7 @@ public class ConversationRepository {
                    c.last_message_at,
                    0::bigint AS unread_count,
                    NULL::timestamptz AS archived_at,
+                   NULL::timestamptz AS deleted_at,
                    c.created_at,
                    c.updated_at
             FROM conversations c
@@ -78,6 +79,11 @@ public class ConversationRepository {
                        WHEN c.seller_id = ? THEN c.seller_archived_at
                        ELSE NULL
                    END AS archived_at,
+                   CASE
+                       WHEN c.buyer_id = ? THEN c.buyer_deleted_at
+                       WHEN c.seller_id = ? THEN c.seller_deleted_at
+                       ELSE NULL
+                   END AS deleted_at,
                    c.created_at,
                    c.updated_at
             FROM conversations c
@@ -164,30 +170,59 @@ public class ConversationRepository {
     }
 
     public Optional<ConversationRecord> findByIdForViewer(long conversationId, long viewerId) {
-        return jdbcTemplate.query(CONVERSATION_SELECT_FOR_VIEWER + " WHERE c.id = ?",
-                new ConversationRowMapper(),
-                viewerId,
-                viewerId,
-                viewerId,
-                viewerId,
-                conversationId
-        ).stream().findFirst();
-    }
-
-    public Optional<ConversationRecord> findByIdForUpdate(long conversationId) {
-        return jdbcTemplate.query(CONVERSATION_SELECT + " WHERE c.id = ? FOR UPDATE OF c",
-                new ConversationRowMapper(),
-                conversationId
-        ).stream().findFirst();
-    }
-
-    public List<ConversationRecord> listByParticipant(long userId) {
         return jdbcTemplate.query(CONVERSATION_SELECT_FOR_VIEWER + """
-                        WHERE (c.buyer_id = ? AND c.buyer_archived_at IS NULL)
-                           OR (c.seller_id = ? AND c.seller_archived_at IS NULL)
-                        ORDER BY COALESCE(c.last_message_at, c.created_at) DESC, c.id DESC
+                        WHERE c.id = ?
+                          AND (
+                              (c.buyer_id = ? AND c.buyer_deleted_at IS NULL)
+                              OR (c.seller_id = ? AND c.seller_deleted_at IS NULL)
+                          )
                         """,
                 new ConversationRowMapper(),
+                viewerId,
+                viewerId,
+                viewerId,
+                viewerId,
+                viewerId,
+                viewerId,
+                conversationId,
+                viewerId,
+                viewerId
+        ).stream().findFirst();
+    }
+
+    public Optional<ConversationRecord> findByIdForViewerForUpdate(long conversationId, long viewerId) {
+        return jdbcTemplate.query(CONVERSATION_SELECT_FOR_VIEWER + """
+                        WHERE c.id = ?
+                          AND (
+                              (c.buyer_id = ? AND c.buyer_deleted_at IS NULL)
+                              OR (c.seller_id = ? AND c.seller_deleted_at IS NULL)
+                          )
+                        FOR UPDATE OF c
+                        """,
+                new ConversationRowMapper(),
+                viewerId,
+                viewerId,
+                viewerId,
+                viewerId,
+                viewerId,
+                viewerId,
+                conversationId,
+                viewerId,
+                viewerId
+        ).stream().findFirst();
+    }
+
+    public List<ConversationRecord> listByParticipant(long userId, boolean archivedOnly) {
+        String buyerArchivedClause = archivedOnly ? "c.buyer_archived_at IS NOT NULL" : "c.buyer_archived_at IS NULL";
+        String sellerArchivedClause = archivedOnly ? "c.seller_archived_at IS NOT NULL" : "c.seller_archived_at IS NULL";
+        return jdbcTemplate.query(CONVERSATION_SELECT_FOR_VIEWER + """
+                        WHERE (c.buyer_id = ? AND c.buyer_deleted_at IS NULL AND %s)
+                           OR (c.seller_id = ? AND c.seller_deleted_at IS NULL AND %s)
+                        ORDER BY COALESCE(c.last_message_at, c.created_at) DESC, c.id DESC
+                        """.formatted(buyerArchivedClause, sellerArchivedClause),
+                new ConversationRowMapper(),
+                userId,
+                userId,
                 userId,
                 userId,
                 userId,
@@ -444,6 +479,26 @@ public class ConversationRepository {
         );
     }
 
+    public int deleteForParticipant(long conversationId, long userId, Instant deletedAt) {
+        return jdbcTemplate.update("""
+                        UPDATE conversations
+                        SET buyer_deleted_at = CASE WHEN buyer_id = ? THEN ? ELSE buyer_deleted_at END,
+                            seller_deleted_at = CASE WHEN seller_id = ? THEN ? ELSE seller_deleted_at END,
+                            updated_at = ?
+                        WHERE id = ?
+                          AND (buyer_id = ? OR seller_id = ?)
+                        """,
+                userId,
+                Timestamp.from(deletedAt),
+                userId,
+                Timestamp.from(deletedAt),
+                Timestamp.from(deletedAt),
+                conversationId,
+                userId,
+                userId
+        );
+    }
+
     public int unarchive(long conversationId, long userId, Instant updatedAt) {
         return jdbcTemplate.update("""
                         UPDATE conversations
@@ -453,6 +508,28 @@ public class ConversationRepository {
                         WHERE id = ?
                           AND (buyer_id = ? OR seller_id = ?)
                         """,
+                userId,
+                userId,
+                Timestamp.from(updatedAt),
+                conversationId,
+                userId,
+                userId
+        );
+    }
+
+    public int restoreVisibilityForParticipant(long conversationId, long userId, Instant updatedAt) {
+        return jdbcTemplate.update("""
+                        UPDATE conversations
+                        SET buyer_archived_at = CASE WHEN buyer_id = ? THEN NULL ELSE buyer_archived_at END,
+                            seller_archived_at = CASE WHEN seller_id = ? THEN NULL ELSE seller_archived_at END,
+                            buyer_deleted_at = CASE WHEN buyer_id = ? THEN NULL ELSE buyer_deleted_at END,
+                            seller_deleted_at = CASE WHEN seller_id = ? THEN NULL ELSE seller_deleted_at END,
+                            updated_at = ?
+                        WHERE id = ?
+                          AND (buyer_id = ? OR seller_id = ?)
+                        """,
+                userId,
+                userId,
                 userId,
                 userId,
                 Timestamp.from(updatedAt),
@@ -571,6 +648,7 @@ public class ConversationRepository {
                     nullableInstant(resultSet, "last_message_at"),
                     resultSet.getLong("unread_count"),
                     nullableInstant(resultSet, "archived_at"),
+                    nullableInstant(resultSet, "deleted_at"),
                     resultSet.getTimestamp("created_at").toInstant(),
                     resultSet.getTimestamp("updated_at").toInstant()
             );

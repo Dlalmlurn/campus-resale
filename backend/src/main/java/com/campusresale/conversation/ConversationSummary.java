@@ -15,6 +15,7 @@ public record ConversationSummary(
         Instant lastMessageAt,
         long unreadCount,
         boolean archived,
+        boolean deleted,
         Instant createdAt,
         Instant updatedAt
 ) {
@@ -33,6 +34,7 @@ public record ConversationSummary(
                 record.lastMessageAt(),
                 record.unreadCount(),
                 record.archivedAt() != null,
+                record.deletedAt() != null,
                 record.createdAt(),
                 record.updatedAt()
         );

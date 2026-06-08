@@ -17,6 +17,7 @@ public record ConversationRecord(
         Instant lastMessageAt,
         long unreadCount,
         Instant archivedAt,
+        Instant deletedAt,
         Instant createdAt,
         Instant updatedAt
 ) {

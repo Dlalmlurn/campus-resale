@@ -1,16 +1,18 @@
-import { Archive, Ban, HandCoins, ImagePlus, MessageSquareText, RefreshCw, Send, ShoppingBag, Wifi, WifiOff } from "lucide-react";
+import { Archive, ArchiveRestore, Ban, HandCoins, ImagePlus, MessageSquareText, RefreshCw, Send, ShoppingBag, Trash2, Wifi, WifiOff } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   archiveConversation,
   blockConversation,
   acceptBargainCard,
   createBargainCard,
+  deleteConversation,
   getConversationDetail,
   getConversationMessagesAfter,
   getConversations,
   rejectBargainCard,
   sendConversationImageMessage,
-  sendConversationMessage
+  sendConversationMessage,
+  unarchiveConversation
 } from "../api/conversations";
 import { uploadFile } from "../api/m1";
 import { createOrder } from "../api/orders";
@@ -26,6 +28,7 @@ import type {
 
 type Notify = (tone: "success" | "error", text: string) => void;
 type ConnectionState = "connecting" | "online" | "offline";
+type ConversationTab = "active" | "archived";
 
 const bargainStatusLabels: Record<string, string> = {
   PENDING: "待处理",
@@ -41,18 +44,19 @@ export function ConversationsPage(props: {
   onOpenConversation: (id: number) => void;
 }) {
   const [items, setItems] = useState<ConversationSummary[]>([]);
+  const [tab, setTab] = useState<ConversationTab>("active");
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setItems(await getConversations());
+      setItems(await getConversations({ archivedOnly: tab === "archived" }));
     } catch (error) {
       props.notify("error", messageOf(error));
     } finally {
       setLoading(false);
     }
-  }, [props.notify]);
+  }, [props.notify, tab]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -61,13 +65,17 @@ export function ConversationsPage(props: {
       <section className="page-heading">
         <div>
           <p className="eyebrow">站内协商</p>
-          <h1>我的会话</h1>
-          <p>围绕商品保留沟通记录和议价卡片，协商价只能来自卖家已接受的议价。</p>
+          <h1>我的消息</h1>
+          <p>围绕商品保留沟通记录和议价卡片，协商价可在聊天内直接创建订单。</p>
         </div>
         <button className="icon-button subtle" type="button" aria-label="刷新会话" onClick={() => void load()}><RefreshCw size={17} /></button>
       </section>
+      <div className="segmented-control conversation-tabs" aria-label="消息筛选">
+        <button className={tab === "active" ? "active" : ""} type="button" onClick={() => setTab("active")}>当前消息</button>
+        <button className={tab === "archived" ? "active" : ""} type="button" onClick={() => setTab("archived")}>已归档</button>
+      </div>
       <div className="conversation-list">
-        {loading ? <StateBlock title="会话加载中" /> : items.length === 0 ? <StateBlock title="暂无会话" /> : items.map((item) => {
+        {loading ? <StateBlock title="消息加载中" /> : items.length === 0 ? <StateBlock title={tab === "archived" ? "暂无已归档消息" : "暂无消息"} /> : items.map((item) => {
           const role = item.buyer.id === props.currentUser.id ? "我是买家" : "我是卖家";
           const unread = item.unreadCount > 0;
           return (
@@ -77,6 +85,7 @@ export function ConversationsPage(props: {
                 <div className="badge-row">
                   <span className="badge neutral">{role}</span>
                   <span className={item.status === "BLOCKED" ? "badge danger" : "badge success"}>{item.status}</span>
+                  {item.archived && <span className="badge neutral">已归档</span>}
                   {unread && <span className="badge warning">{item.unreadCount} 条未读</span>}
                 </div>
                 <h2>{item.goodsTitle}</h2>
@@ -248,8 +257,28 @@ export function ConversationDetailPage(props: {
   const archive = async () => {
     setBusy(true);
     try {
-      await archiveConversation(props.id);
-      props.notify("success", "会话已归档");
+      if (conversation?.archived) {
+        const updated = await unarchiveConversation(props.id);
+        setDetail((value) => value ? { ...value, conversation: updated } : value);
+        props.notify("success", "已移出归档");
+      } else {
+        const updated = await archiveConversation(props.id);
+        setDetail((value) => value ? { ...value, conversation: updated } : value);
+        props.notify("success", "消息已归档");
+        props.onBack();
+      }
+    } catch (error) {
+      props.notify("error", messageOf(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    setBusy(true);
+    try {
+      await deleteConversation(props.id);
+      props.notify("success", "消息已删除");
       props.onBack();
     } catch (error) {
       props.notify("error", messageOf(error));
@@ -285,6 +314,7 @@ export function ConversationDetailPage(props: {
         note: orderForm.note
       });
       props.notify("success", "已按协商价创建订单");
+      await load();
       props.onOpenOrder(order.id);
     } catch (error) {
       props.notify("error", messageOf(error));
@@ -293,16 +323,16 @@ export function ConversationDetailPage(props: {
     }
   };
 
-  if (!detail || !conversation) return <StateBlock title="会话加载中" />;
+  if (!detail || !conversation) return <StateBlock title="消息加载中" />;
 
   return (
     <section className="conversation-detail-page">
-      <button className="text-button back-button" type="button" onClick={props.onBack}>返回会话列表</button>
+      <button className="text-button back-button" type="button" onClick={props.onBack}>返回消息列表</button>
       <div className="conversation-detail-grid">
         <article className="form-panel conversation-thread">
           <div className="panel-title">
             <div>
-              <p className="eyebrow">商品会话</p>
+              <p className="eyebrow">商品消息</p>
               <h1>{conversation.goodsTitle}</h1>
             </div>
             <span className={`badge ${connection === "online" ? "success" : "warning"}`}>{connection === "online" ? <Wifi size={13} /> : <WifiOff size={13} />}{connection === "online" ? "实时在线" : "轮询补偿"}</span>
@@ -324,7 +354,7 @@ export function ConversationDetailPage(props: {
               <ImagePlus size={17} />
               <input accept="image/jpeg,image/png,image/webp" disabled={imageBusy || busy || !canWrite} type="file" onChange={(event) => void uploadImage(event.target.files?.[0])} />
             </label>
-            <input value={message} disabled={!canWrite} onChange={(event) => setMessage(event.target.value)} placeholder={canWrite ? "输入消息" : "会话当前不可发送消息"} />
+            <input value={message} disabled={!canWrite} onChange={(event) => setMessage(event.target.value)} placeholder={canWrite ? "输入消息" : "消息当前不可发送"} />
             <button className="primary-button compact" disabled={busy || !message.trim() || !canWrite} type="submit"><Send size={16} /> 发送</button>
           </form>
           {imageError && <p className="form-hint error-text">{imageError}</p>}
@@ -332,10 +362,11 @@ export function ConversationDetailPage(props: {
         <aside className="side-panel conversation-side">
           <div className="conversation-actions">
             <span className="badge neutral">{isBuyer ? "我是买家" : "我是卖家"}</span>
-            <button className="secondary-button compact" disabled={busy} type="button" onClick={() => void archive()}><Archive size={15} /> 归档</button>
+            <button className="secondary-button compact" disabled={busy} type="button" onClick={() => void archive()}>{conversation.archived ? <ArchiveRestore size={15} /> : <Archive size={15} />}{conversation.archived ? "移出归档" : "归档"}</button>
+            <button className="secondary-button compact danger-action" disabled={busy} type="button" onClick={() => void remove()}><Trash2 size={15} /> 删除</button>
             <button className="secondary-button compact danger-action" disabled={busy || conversation.status === "BLOCKED"} type="button" onClick={() => void block()}><Ban size={15} /> 屏蔽</button>
           </div>
-          {!canWrite && <p className="closed-hint">会话已屏蔽，不能继续发送消息或议价。</p>}
+          {!canWrite && <p className="closed-hint">消息已屏蔽，不能继续发送消息或议价。</p>}
           {isBuyer && canWrite && (
             <form className="inline-action" onSubmit={(event) => void submitBargain(event)}>
               <div className="panel-title"><h2><HandCoins size={17} /> 发起议价</h2></div>
