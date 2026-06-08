@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" role="img" aria-label="校园二手集市商品占位图">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#eaf4ef"/>
+      <stop offset="1" stop-color="#d7ebe2"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="300" fill="url(#bg)"/>
+  <g transform="translate(200 138)" fill="none" stroke="#16775f" stroke-width="8" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M-58 -22 L0 -52 L58 -22 L58 46 A6 6 0 0 1 52 52 L-52 52 A6 6 0 0 1 -58 46 Z" fill="#ffffff"/>
+    <path d="M-58 -22 L0 8 L58 -22"/>
+    <path d="M0 8 L0 52"/>
+  </g>
+  <text x="200" y="242" text-anchor="middle" font-family="-apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif"
+        font-size="20" font-weight="700" fill="#0f5f4b">校园二手集市</text>
+  <text x="200" y="266" text-anchor="middle" font-family="-apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif"
+        font-size="13" fill="#5b8576">暂未上传实拍图</text>
+</svg>

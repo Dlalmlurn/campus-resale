@@ -1,6 +1,9 @@
 // 文件功能：App 各页面共享的小型展示组件。原本内联在 App.tsx，拆分页面后集中到此处复用。
-import { Check, ClipboardCheck, RefreshCw, ShoppingBag, X } from "lucide-react";
+import { Check, ClipboardCheck, RefreshCw, X } from "lucide-react";
 import type { CurrentUser, GoodsSummary } from "../api/types";
+
+// 没有实拍图的商品统一回退到这张占位图（提交进 public/，随 git 同步，全员一致、无外链）。
+const GOODS_PLACEHOLDER = "/goods-placeholder.svg";
 
 export function NavButton(props: { active: boolean; icon: React.ReactNode; label: string; onClick: () => void }) {
   return <button className={`nav-button ${props.active ? "active" : ""}`} type="button" onClick={props.onClick}>{props.icon}<span>{props.label}</span></button>;
@@ -22,9 +25,8 @@ export function FormField(props: { label: string; children: React.ReactNode }) {
 }
 
 export function GoodsImage({ item, large = false }: { item: GoodsSummary; large?: boolean }) {
-  return item.primaryImage
-    ? <img className={`goods-image ${large ? "large" : ""}`} src={item.primaryImage.url} alt={item.title} />
-    : <div className={`goods-image placeholder ${large ? "large" : ""}`}><ShoppingBag size={large ? 52 : 36} /></div>;
+  const src = item.primaryImage ? item.primaryImage.url : GOODS_PLACEHOLDER;
+  return <img className={`goods-image ${large ? "large" : ""}`} src={src} alt={item.title} />;
 }
 
 export function StatusBadge({ value, labels }: { value: string; labels: Record<string, string> }) {
