@@ -1,20 +1,15 @@
 // 文件功能：提供 N3 治理与信用中心页面，聚合举报、申诉、退款、收藏关注、管理员待办和信用画像。
-import { AlertTriangle, BadgeCheck, FileWarning, Heart, RefreshCw, RotateCcw, ShieldAlert, UserPlus } from "lucide-react";
+import { AlertTriangle, RefreshCw, RotateCcw, ShieldAlert } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import {
-  addFavorite,
   createRefund,
   decideRefund,
   getGovernanceOverview,
   GovernanceOverview,
   handleReport,
   liftPenalty,
-  removeFavorite,
   reviewAppeal,
-  submitAppeal,
-  submitReport,
-  followUser,
-  unfollowUser
+  submitAppeal
 } from "../api/governance";
 import { uploadFile } from "../api/m1";
 import type { CurrentUser } from "../api/types";
@@ -53,12 +48,8 @@ const penaltyTypeLabels: Record<string, string> = {
 export function GovernancePage(props: { currentUser: CurrentUser; notify: Notify }) {
   const [overview, setOverview] = useState<GovernanceOverview | null>(null);
   const [busy, setBusy] = useState(false);
-  const [reportForm, setReportForm] = useState({ targetType: "GOODS", targetId: "", reasonType: "FRAUD", description: "" });
   const [appealForm, setAppealForm] = useState({ reportId: "", description: "" });
   const [refundForm, setRefundForm] = useState({ orderId: "", refundType: "FULL", amount: "", reason: "" });
-  const [favoriteId, setFavoriteId] = useState("");
-  const [followId, setFollowId] = useState("");
-  const [reportEvidenceIds, setReportEvidenceIds] = useState<number[]>([]);
   const [appealEvidenceIds, setAppealEvidenceIds] = useState<number[]>([]);
 
   const load = useCallback(async () => {
@@ -84,17 +75,6 @@ export function GovernancePage(props: { currentUser: CurrentUser; notify: Notify
     }
   };
 
-  const onReport = (event: FormEvent) => {
-    event.preventDefault();
-    void run(() => submitReport({
-      targetType: reportForm.targetType,
-      targetId: Number(reportForm.targetId),
-      reasonType: reportForm.reasonType,
-      description: reportForm.description,
-      evidenceFileIds: reportEvidenceIds
-    }), "举报已提交");
-  };
-
   const onAppeal = (event: FormEvent) => {
     event.preventDefault();
     void run(() => submitAppeal({
@@ -104,12 +84,11 @@ export function GovernancePage(props: { currentUser: CurrentUser; notify: Notify
     }), "申诉已提交");
   };
 
-  const uploadEvidence = async (file: File | undefined, fileKind: "REPORT_EVIDENCE" | "APPEAL_EVIDENCE") => {
+  const uploadAppealEvidence = async (file?: File) => {
     if (!file) return;
     await run(async () => {
-      const uploaded = await uploadFile(file, fileKind);
-      if (fileKind === "REPORT_EVIDENCE") setReportEvidenceIds((current) => [...current, uploaded.id]);
-      else setAppealEvidenceIds((current) => [...current, uploaded.id]);
+      const uploaded = await uploadFile(file, "APPEAL_EVIDENCE");
+      setAppealEvidenceIds((current) => [...current, uploaded.id]);
     }, "证据文件已上传");
   };
 
@@ -132,7 +111,7 @@ export function GovernancePage(props: { currentUser: CurrentUser; notify: Notify
         <div>
           <p className="eyebrow">N3 平台治理</p>
           <h1>治理与信用中心</h1>
-          <p>集中处理举报、申诉、退款、收藏关注和信用摘要，管理员账号可直接处理待办。</p>
+          <p>集中查看举报与收藏关注记录、提交申诉与退款、查看信用画像，管理员账号可直接处理待办。</p>
         </div>
         <button className="secondary-button" disabled={busy} type="button" onClick={() => void load()}><RefreshCw size={17} /> 刷新</button>
       </section>
@@ -165,39 +144,10 @@ export function GovernancePage(props: { currentUser: CurrentUser; notify: Notify
           </section>
 
           <div className="governance-layout">
-            <form id="governance-report-section" className="form-panel" onSubmit={onReport}>
-              <div className="panel-title"><h2><FileWarning size={17} /> 提交举报</h2></div>
-              <div className="form-grid">
-                <FormField label="对象类型">
-                  <select value={reportForm.targetType} onChange={(event) => setReportForm({ ...reportForm, targetType: event.target.value })}>
-                    <option value="GOODS">商品</option>
-                    <option value="ORDER">订单</option>
-                    <option value="USER">用户</option>
-                  </select>
-                </FormField>
-                <FormField label="对象 ID">
-                  <input required min="1" type="number" value={reportForm.targetId} onChange={(event) => setReportForm({ ...reportForm, targetId: event.target.value })} />
-                </FormField>
-              </div>
-              <FormField label="举报原因">
-                <select value={reportForm.reasonType} onChange={(event) => setReportForm({ ...reportForm, reasonType: event.target.value })}>
-                  <option value="FRAUD">疑似欺诈</option>
-                  <option value="FAKE_GOODS">商品不实</option>
-                  <option value="HARASSMENT">骚扰沟通</option>
-                  <option value="SAFETY">安全风险</option>
-                </select>
-              </FormField>
-              <FormField label="说明">
-                <textarea required rows={3} value={reportForm.description} onChange={(event) => setReportForm({ ...reportForm, description: event.target.value })} />
-              </FormField>
-              <label className="upload-zone compact-zone">
-                <FileWarning size={19} />
-                <span>上传举报证据</span>
-                <input accept="image/jpeg,image/png,image/webp" type="file" onChange={(event) => void uploadEvidence(event.target.files?.[0], "REPORT_EVIDENCE")} />
-              </label>
-              {reportEvidenceIds.length > 0 && <p className="form-hint">已关联证据 #{reportEvidenceIds.join(", #")}</p>}
-              <button className="primary-button full-width" disabled={busy} type="submit">提交举报</button>
-            </form>
+            <section className="form-panel governance-entry-note">
+              <div className="panel-title"><h2><ShieldAlert size={17} /> 举报入口已统一</h2></div>
+              <p className="form-hint">举报、收藏、关注请在对应的商品卡片、商品详情、订单或消息页内直接操作；本页只用于查看记录、提交申诉/退款以及管理员处理待办。</p>
+            </section>
 
             <form id="governance-appeal-section" className="form-panel" onSubmit={onAppeal}>
               <div className="panel-title"><h2><ShieldAlert size={17} /> 提交申诉</h2></div>
@@ -210,7 +160,7 @@ export function GovernancePage(props: { currentUser: CurrentUser; notify: Notify
               <label className="upload-zone compact-zone">
                 <ShieldAlert size={19} />
                 <span>上传申诉证据</span>
-                <input accept="image/jpeg,image/png,image/webp" type="file" onChange={(event) => void uploadEvidence(event.target.files?.[0], "APPEAL_EVIDENCE")} />
+                <input accept="image/jpeg,image/png,image/webp" type="file" onChange={(event) => void uploadAppealEvidence(event.target.files?.[0])} />
               </label>
               {appealEvidenceIds.length > 0 && <p className="form-hint">已关联证据 #{appealEvidenceIds.join(", #")}</p>}
               <button className="primary-button full-width" disabled={busy} type="submit">提交申诉</button>
@@ -233,15 +183,9 @@ export function GovernancePage(props: { currentUser: CurrentUser; notify: Notify
               </FormField>
               <button className="primary-button full-width" disabled={busy} type="submit">提交退款申请</button>
             </form>
-
-            <section className="side-panel governance-actions">
-              <div className="panel-title"><h2>收藏与关注</h2></div>
-              <InlineAction icon={<Heart size={16} />} value={favoriteId} label="商品 ID" onChange={setFavoriteId} primary="收藏" secondary="取消" onPrimary={() => void run(() => addFavorite(Number(favoriteId)), "已收藏商品")} onSecondary={() => void run(() => removeFavorite(Number(favoriteId)), "已取消收藏")} />
-              <InlineAction icon={<UserPlus size={16} />} value={followId} label="用户 ID" onChange={setFollowId} primary="关注" secondary="取消" onPrimary={() => void run(() => followUser(Number(followId)), "已关注用户")} onSecondary={() => void run(() => unfollowUser(Number(followId)), "已取消关注")} />
-            </section>
           </div>
 
-          <section className="governance-board">
+          <section id="governance-report-section" className="governance-board">
             <RecordColumn title="我的举报" empty="暂无举报记录">
               {overview.reports.map((item) => <RecordRow key={item.id} title={`#${item.id} ${targetLabel(item.targetType)} ${item.targetId}`} badge={reportStatusLabels[item.status] ?? item.status} text={item.description} />)}
             </RecordColumn>
@@ -307,18 +251,6 @@ function Metric(props: { title: string; value: string | number; text: string }) 
 
 function FormField(props: { label: string; children: React.ReactNode }) {
   return <label className="form-field"><span>{props.label}</span>{props.children}</label>;
-}
-
-function InlineAction(props: { icon: React.ReactNode; label: string; value: string; onChange: (value: string) => void; primary: string; secondary: string; onPrimary: () => void; onSecondary: () => void }) {
-  return (
-    <div className="inline-action">
-      <label><span>{props.icon}{props.label}</span><input min="1" type="number" value={props.value} onChange={(event) => props.onChange(event.target.value)} /></label>
-      <div className="button-row">
-        <button className="secondary-button compact" type="button" onClick={props.onPrimary}>{props.primary}</button>
-        <button className="text-button" type="button" onClick={props.onSecondary}>{props.secondary}</button>
-      </div>
-    </div>
-  );
 }
 
 function RecordColumn(props: { title: string; empty: string; children: React.ReactNode }) {

@@ -110,4 +110,20 @@ public final class AuthRequests {
             String password
     ) {
     }
+
+    /**
+     * 登录态直接修改密码请求体；无需邮箱，校验当前密码后设置新密码。
+     *
+     * @param currentPassword 当前密码，用于二次确认是本人操作。
+     * @param newPassword 新密码，沿用注册密码长度规则。
+     */
+    public record ChangePasswordRequest(
+            @NotBlank(message = "当前密码不能为空")
+            String currentPassword,
+
+            @NotBlank(message = "新密码不能为空")
+            @Size(min = 8, max = 120, message = "密码长度必须在 8 到 120 个字符之间")
+            String newPassword
+    ) {
+    }
 }

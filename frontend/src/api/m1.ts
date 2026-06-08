@@ -93,6 +93,13 @@ export function uploadAvatar(file: File) {
   return apiRequest<CurrentUser>("/api/auth/me/avatar", { method: "POST", body });
 }
 
+export function changePassword(currentPassword: string, newPassword: string) {
+  return apiRequest<CurrentUser>("/api/auth/me/password", {
+    method: "POST",
+    body: JSON.stringify({ currentPassword, newPassword })
+  });
+}
+
 export function uploadFile(file: File, fileKind: "AVATAR" | "GOODS_IMAGE" | "CAMPUS_AUTH_MATERIAL" | "ORDER_EVIDENCE" | "REPORT_EVIDENCE" | "APPEAL_EVIDENCE" | "MESSAGE_IMAGE") {
   const body = new FormData();
   body.set("file", file);

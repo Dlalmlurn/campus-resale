@@ -212,6 +212,30 @@ public class AuthService {
     }
 
     /**
+     * 登录态直接修改密码：校验当前密码后设置新密码，并撤销其它端 session（保留当前会话）。
+     */
+    @Transactional
+    public CurrentUserResponse changePassword(CurrentPrincipal principal, String currentPassword, String newPassword) {
+        UserAccount userAccount = userAccountRepository.findById(principal.id())
+                .orElseThrow(() -> ApiExceptions.notFound("账号不存在"));
+        if (!userAccount.isActive()) {
+            throw ApiExceptions.forbidden("账号当前不可用");
+        }
+        if (!passwordService.matches(currentPassword, userAccount.passwordHash())) {
+            throw ApiExceptions.validation("当前密码不正确", Map.of("field", "currentPassword"));
+        }
+        if (passwordService.matches(newPassword, userAccount.passwordHash())) {
+            throw ApiExceptions.validation("新密码不能与当前密码相同", Map.of("field", "newPassword"));
+        }
+
+        Instant now = Instant.now();
+        userAccountRepository.updatePasswordHash(userAccount.id(), passwordService.hash(newPassword), now);
+        // 只撤销其它端 session，保留当前会话，避免用户在个人中心改密后立刻被登出。
+        userSessionRepository.revokeOtherActiveSessions(userAccount.id(), principal.sessionId(), now);
+        return currentUser(principal);
+    }
+
+    /**
      * 当前用户自助注销账号：校验密码后软禁用账号，并撤销全部 session。
      */
     @Transactional

@@ -195,6 +195,47 @@ class AuthServiceTest {
                         exception -> assertThat(exception.code()).isEqualTo("FORBIDDEN"));
     }
 
+    @Test
+    void changePasswordUpdatesHashAndRevokesOtherSessions() {
+        UserAccount userAccount = userWithRoles("alice", "REGISTERED_USER");
+        when(userAccountRepository.findById(1L)).thenReturn(Optional.of(userAccount));
+        when(passwordService.matches("520zikejiang", "hash")).thenReturn(true);
+        when(passwordService.matches("new-strong-pass", "hash")).thenReturn(false);
+        when(passwordService.hash("new-strong-pass")).thenReturn("new-hash");
+        when(currentUserMapper.fromUser(userAccount)).thenReturn(new CurrentUserResponse(
+                1L, "alice", "Test", null, List.of("REGISTERED_USER"), "NONE", false));
+
+        authService.changePassword(principalWithRoles("REGISTERED_USER"), "520zikejiang", "new-strong-pass");
+
+        verify(userAccountRepository).updatePasswordHash(eq(1L), eq("new-hash"), any());
+        // 保留当前会话，只撤销其它端 session。
+        verify(userSessionRepository).revokeOtherActiveSessions(eq(1L), eq(1L), any());
+    }
+
+    @Test
+    void changePasswordRejectsWrongCurrentPassword() {
+        UserAccount userAccount = userWithRoles("alice", "REGISTERED_USER");
+        when(userAccountRepository.findById(1L)).thenReturn(Optional.of(userAccount));
+        when(passwordService.matches("wrong", "hash")).thenReturn(false);
+
+        assertThatThrownBy(() -> authService.changePassword(principalWithRoles("REGISTERED_USER"), "wrong", "new-strong-pass"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        exception -> assertThat(exception.code()).isEqualTo("VALIDATION_FAILED"));
+        verify(userAccountRepository, never()).updatePasswordHash(anyLong(), any(), any());
+    }
+
+    @Test
+    void changePasswordRejectsReusingCurrentPassword() {
+        UserAccount userAccount = userWithRoles("alice", "REGISTERED_USER");
+        when(userAccountRepository.findById(1L)).thenReturn(Optional.of(userAccount));
+        when(passwordService.matches("520zikejiang", "hash")).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.changePassword(principalWithRoles("REGISTERED_USER"), "520zikejiang", "520zikejiang"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        exception -> assertThat(exception.code()).isEqualTo("VALIDATION_FAILED"));
+        verify(userAccountRepository, never()).updatePasswordHash(anyLong(), any(), any());
+    }
+
     private void stubSuccessfulLogin(UserAccount userAccount) {
         when(userAccountRepository.findByUsername(userAccount.username())).thenReturn(Optional.of(userAccount));
         when(passwordService.matches("520zikejiang", userAccount.passwordHash())).thenReturn(true);

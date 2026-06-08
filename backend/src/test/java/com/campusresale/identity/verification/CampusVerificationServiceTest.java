@@ -120,6 +120,79 @@ class CampusVerificationServiceTest {
         );
     }
 
+    @Test
+    void rejectsMalformedCampusEmail() {
+        when(campusVerificationRepository.findByUserId(1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.updateMyVerification(
+                principal(1L, Set.of("REGISTERED_USER")),
+                new UpsertRequest(null, null, null, "a@@edu.cn", null, List.of())
+        )).isInstanceOfSatisfying(ApiException.class,
+                exception -> assertThat(exception.code()).isEqualTo("VALIDATION_FAILED"));
+
+        verify(campusVerificationRepository, never()).upsertDraft(
+                org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any()
+        );
+    }
+
+    @Test
+    void rejectsDisallowedCampusEmailDomain() {
+        when(campusVerificationRepository.findByUserId(1L)).thenReturn(Optional.empty());
+        when(systemConfigRepository.stringListValue(
+                org.mockito.ArgumentMatchers.eq("campus.auth.email_suffixes"),
+                org.mockito.ArgumentMatchers.any()
+        )).thenReturn(List.of("edu.cn"));
+
+        assertThatThrownBy(() -> service.updateMyVerification(
+                principal(1L, Set.of("REGISTERED_USER")),
+                new UpsertRequest(null, null, null, "user@evil-edu.cn", null, List.of())
+        )).isInstanceOfSatisfying(ApiException.class,
+                exception -> assertThat(exception.code()).isEqualTo("VALIDATION_FAILED"));
+    }
+
+    @Test
+    void acceptsCampusSubdomainEmail() {
+        when(campusVerificationRepository.findByUserId(1L)).thenReturn(Optional.empty());
+        when(systemConfigRepository.stringListValue(
+                org.mockito.ArgumentMatchers.eq("campus.auth.email_suffixes"),
+                org.mockito.ArgumentMatchers.any()
+        )).thenReturn(List.of("edu.cn"));
+        when(campusVerificationRepository.upsertDraft(
+                org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq("stu@mails.zju.edu.cn"),
+                org.mockito.ArgumentMatchers.any()
+        )).thenReturn(7L);
+        when(campusVerificationRepository.findById(7L)).thenReturn(Optional.of(snapshot(
+                CampusVerificationStatus.ACCUMULATING,
+                10,
+                factor(CampusFactorType.CAMPUS_EMAIL, CampusFactorStatus.VERIFIED, 10, List.of())
+        )));
+
+        CampusVerificationResponse response = service.updateMyVerification(
+                principal(1L, Set.of("REGISTERED_USER")),
+                new UpsertRequest(null, null, null, "stu@mails.zju.edu.cn", null, List.of())
+        );
+
+        // 子域邮箱通过后缀校验，落到草稿；不再因为不是完整等于 edu.cn 而被拒。
+        assertThat(response).isNotNull();
+        verify(campusVerificationRepository).upsertDraft(
+                org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq("stu@mails.zju.edu.cn"),
+                org.mockito.ArgumentMatchers.any()
+        );
+    }
+
     private CampusVerificationSnapshot snapshot(
             CampusVerificationStatus status,
             int score,

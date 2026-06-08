@@ -1,6 +1,7 @@
 // 文件功能：实现注册、登录、退出、当前用户查询、密码找回和自助注销 Auth API。
 package com.campusresale.identity.api;
 
+import com.campusresale.identity.api.AuthRequests.ChangePasswordRequest;
 import com.campusresale.identity.api.AuthRequests.DeleteAccountRequest;
 import com.campusresale.identity.api.AuthRequests.LoginRequest;
 import com.campusresale.identity.api.AuthRequests.PasswordResetConfirmRequest;
@@ -149,6 +150,20 @@ public class AuthController {
     @PostMapping("/password-reset/confirm")
     public PasswordResetConfirmResponse confirmPasswordReset(@Valid @RequestBody PasswordResetConfirmRequest request) {
         return authService.confirmPasswordReset(request);
+    }
+
+    /**
+     * 登录态直接修改密码；无需邮箱，校验当前密码后设置新密码并撤销其它端 session。
+     */
+    @RequireLogin
+    @PostMapping("/me/password")
+    public CurrentUserResponse changePassword(
+            @Valid @RequestBody ChangePasswordRequest request,
+            HttpServletRequest servletRequest
+    ) {
+        CurrentPrincipal principal = CurrentPrincipalContext.get(servletRequest)
+                .orElseThrow(ApiExceptions::authRequired);
+        return authService.changePassword(principal, request.currentPassword(), request.newPassword());
     }
 
     /**

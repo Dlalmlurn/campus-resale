@@ -1,8 +1,8 @@
 // 文件功能："我的"个人中心（头像、收藏、浏览、关注、我发布/买到/卖出）。原内联于 App.tsx。
-import { RefreshCw, UserMinus } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { KeyRound, RefreshCw, UserMinus } from "lucide-react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import { getGovernanceOverview, unfollowUser } from "../api/governance";
-import { getMyGoods, uploadAvatar } from "../api/m1";
+import { changePassword, getMyGoods, uploadAvatar } from "../api/m1";
 import { getOrders } from "../api/orders";
 import type { CurrentUser, GoodsSummary, OrderSummary } from "../api/types";
 import { Avatar, LoadingBlock, MetricTile, ProfileColumn } from "../components/ui";
@@ -16,6 +16,8 @@ export function ProfilePage(props: { currentUser: CurrentUser; onUserChange: (us
   const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [pwForm, setPwForm] = useState({ current: "", next: "", confirm: "" });
+  const [pwBusy, setPwBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -50,6 +52,25 @@ export function ProfilePage(props: { currentUser: CurrentUser; onUserChange: (us
       props.notify("error", messageOf(error));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const submitPassword = async (event: FormEvent) => {
+    event.preventDefault();
+    if (pwForm.next !== pwForm.confirm) {
+      props.notify("error", "两次输入的新密码不一致");
+      return;
+    }
+    setPwBusy(true);
+    try {
+      const user = await changePassword(pwForm.current, pwForm.next);
+      props.onUserChange(user);
+      setPwForm({ current: "", next: "", confirm: "" });
+      props.notify("success", "密码已更新");
+    } catch (error) {
+      props.notify("error", messageOf(error));
+    } finally {
+      setPwBusy(false);
     }
   };
 
@@ -99,6 +120,16 @@ export function ProfilePage(props: { currentUser: CurrentUser; onUserChange: (us
           <MetricTile label="买到 / 卖出" value={`${bought.length} / ${sold.length}`} />
         </div>
       </section>
+      <form className="form-panel account-security" onSubmit={(event) => void submitPassword(event)}>
+        <div className="panel-title"><h2><KeyRound size={17} /> 修改密码</h2></div>
+        <div className="form-grid">
+          <label className="form-field"><span>当前密码</span><input required type="password" autoComplete="current-password" value={pwForm.current} onChange={(event) => setPwForm({ ...pwForm, current: event.target.value })} /></label>
+          <label className="form-field"><span>新密码</span><input required minLength={8} type="password" autoComplete="new-password" value={pwForm.next} onChange={(event) => setPwForm({ ...pwForm, next: event.target.value })} placeholder="至少 8 位" /></label>
+          <label className="form-field"><span>确认新密码</span><input required minLength={8} type="password" autoComplete="new-password" value={pwForm.confirm} onChange={(event) => setPwForm({ ...pwForm, confirm: event.target.value })} /></label>
+        </div>
+        <p className="form-hint">修改成功后会退出其它设备的登录，当前设备保持登录。</p>
+        <button className="secondary-button" disabled={pwBusy} type="submit">{pwBusy ? "提交中…" : "更新密码"}</button>
+      </form>
       {loading ? <LoadingBlock /> : (
         <div className="profile-grid">
           <ProfileColumn title="我的收藏" empty="暂无收藏商品">

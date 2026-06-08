@@ -30,6 +30,10 @@ public class CampusVerificationService {
     private static final int REVIEW_SCORE_THRESHOLD = 50;
     private static final int TRADE_SCORE_THRESHOLD = 60;
 
+    /** 校园邮箱整体格式：本地部分 + 域名，至少一级顶级域，后缀匹配在此基础上再做。 */
+    private static final java.util.regex.Pattern CAMPUS_EMAIL_PATTERN =
+            java.util.regex.Pattern.compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
+
     private final CampusVerificationRepository campusVerificationRepository;
     private final FileService fileService;
     private final FileRepository fileRepository;
@@ -303,15 +307,16 @@ public class CampusVerificationService {
     }
 
     private void validateCampusEmailSuffix(String campusEmail) {
-        List<String> suffixes = systemConfigRepository.stringListValue("campus.auth.email_suffixes", List.of("example.edu"));
-        int at = campusEmail.lastIndexOf('@');
-        if (at <= 0 || at == campusEmail.length() - 1) {
+        // 先校验整体邮箱格式，避免 "a@@edu.cn""a b@edu.cn" 这类只靠 lastIndexOf('@') 蒙混过关。
+        if (campusEmail == null || !CAMPUS_EMAIL_PATTERN.matcher(campusEmail).matches()) {
             throw ApiExceptions.validation("校园邮箱格式不正确", Map.of("field", "campusEmail"));
         }
-        String domain = campusEmail.substring(at + 1);
+        List<String> suffixes = systemConfigRepository.stringListValue("campus.auth.email_suffixes", List.of("example.edu"));
+        String domain = campusEmail.substring(campusEmail.lastIndexOf('@') + 1).toLowerCase(Locale.ROOT);
         boolean matches = suffixes.stream()
                 .map(suffix -> suffix.toLowerCase(Locale.ROOT))
-                .anyMatch(domain::equals);
+                // 完整域名等于后缀，或作为子域以 ".后缀" 结尾：放行 mails.zju.edu.cn，同时不会误放行 evil-edu.cn。
+                .anyMatch(suffix -> domain.equals(suffix) || domain.endsWith("." + suffix));
         if (!matches) {
             throw ApiExceptions.validation("校园邮箱后缀不在允许范围内", Map.of("field", "campusEmail"));
         }
