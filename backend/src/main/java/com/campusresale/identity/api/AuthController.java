@@ -1,7 +1,10 @@
-// 文件功能：实现注册、登录、退出和当前用户查询四个 Auth API。
+// 文件功能：实现注册、登录、退出、当前用户查询、密码找回和自助注销 Auth API。
 package com.campusresale.identity.api;
 
+import com.campusresale.identity.api.AuthRequests.DeleteAccountRequest;
 import com.campusresale.identity.api.AuthRequests.LoginRequest;
+import com.campusresale.identity.api.AuthRequests.PasswordResetConfirmRequest;
+import com.campusresale.identity.api.AuthRequests.PasswordResetRequest;
 import com.campusresale.identity.api.AuthRequests.RegisterRequest;
 import com.campusresale.identity.application.AuthResult;
 import com.campusresale.identity.application.AuthService;
@@ -23,7 +26,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Auth API 控制器，提供注册、登录、退出和当前用户查询接口。
+ * Auth API 控制器，提供注册、登录、退出、当前用户查询、密码找回和自助注销接口。
  */
 @RestController
 @RequestMapping("/api/auth")
@@ -102,6 +105,39 @@ public class AuthController {
         CurrentPrincipal principal = CurrentPrincipalContext.get(servletRequest)
                 .orElseThrow(ApiExceptions::authRequired);
         return authService.currentUser(principal);
+    }
+
+    /**
+     * 发起邮箱找回密码：统一返回受理，避免暴露邮箱是否注册。
+     */
+    @PostMapping("/password-reset/request")
+    public PasswordResetAcceptedResponse requestPasswordReset(@Valid @RequestBody PasswordResetRequest request) {
+        return authService.requestPasswordReset(request);
+    }
+
+    /**
+     * 使用邮件令牌重置密码。
+     */
+    @PostMapping("/password-reset/confirm")
+    public PasswordResetConfirmResponse confirmPasswordReset(@Valid @RequestBody PasswordResetConfirmRequest request) {
+        return authService.confirmPasswordReset(request);
+    }
+
+    /**
+     * 当前用户自助注销账号；成功后软禁用账号并清空浏览器 Cookie。
+     */
+    @RequireLogin
+    @PostMapping("/me/delete")
+    public DeleteAccountResponse deleteOwnAccount(
+            @Valid @RequestBody DeleteAccountRequest request,
+            HttpServletRequest servletRequest,
+            HttpServletResponse servletResponse
+    ) {
+        CurrentPrincipal principal = CurrentPrincipalContext.get(servletRequest)
+                .orElseThrow(ApiExceptions::authRequired);
+        authService.deleteOwnAccount(principal, request.password());
+        clearSessionCookie(servletResponse);
+        return new DeleteAccountResponse(true);
     }
 
     /**

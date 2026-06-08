@@ -2,9 +2,14 @@
 package com.campusresale.identity.application;
 
 import com.campusresale.identity.api.AuthRequests.LoginRequest;
+import com.campusresale.identity.api.AuthRequests.PasswordResetConfirmRequest;
+import com.campusresale.identity.api.AuthRequests.PasswordResetRequest;
 import com.campusresale.identity.api.AuthRequests.RegisterRequest;
 import com.campusresale.identity.api.CurrentUserResponse;
+import com.campusresale.identity.api.PasswordResetAcceptedResponse;
+import com.campusresale.identity.api.PasswordResetConfirmResponse;
 import com.campusresale.identity.domain.UserAccount;
+import com.campusresale.identity.infrastructure.PasswordResetTokenRepository;
 import com.campusresale.identity.infrastructure.UserAccountRepository;
 import com.campusresale.identity.infrastructure.UserSessionRepository;
 import com.campusresale.platform.api.ApiException;
@@ -48,11 +53,20 @@ public class AuthService {
     /** session 仓储：负责 user_sessions 的创建、查询、续期和撤销。 */
     private final UserSessionRepository userSessionRepository;
 
+    /** 密码找回令牌仓储：保存一次性 token hash 和消费状态。 */
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
+
     /** 密码服务：负责 BCrypt 哈希和明文密码校验。 */
     private final PasswordService passwordService;
 
     /** token 生成器：负责生成真实 token 和数据库 token hash。 */
     private final SessionTokenGenerator sessionTokenGenerator;
+
+    /** 密码找回 token 生成器：负责一次性邮箱令牌。 */
+    private final PasswordResetTokenGenerator passwordResetTokenGenerator;
+
+    /** 密码找回投递边界：当前用于演示日志，后续可接 SMTP。 */
+    private final PasswordResetDeliveryService passwordResetDeliveryService;
 
     /** token 哈希工具：退出登录时把浏览器 token 转成数据库 hash。 */
     private final TokenHasher tokenHasher;
@@ -63,15 +77,21 @@ public class AuthService {
     public AuthService(
             UserAccountRepository userAccountRepository,
             UserSessionRepository userSessionRepository,
+            PasswordResetTokenRepository passwordResetTokenRepository,
             PasswordService passwordService,
             SessionTokenGenerator sessionTokenGenerator,
+            PasswordResetTokenGenerator passwordResetTokenGenerator,
+            PasswordResetDeliveryService passwordResetDeliveryService,
             TokenHasher tokenHasher,
             CurrentUserMapper currentUserMapper
     ) {
         this.userAccountRepository = userAccountRepository;
         this.userSessionRepository = userSessionRepository;
+        this.passwordResetTokenRepository = passwordResetTokenRepository;
         this.passwordService = passwordService;
         this.sessionTokenGenerator = sessionTokenGenerator;
+        this.passwordResetTokenGenerator = passwordResetTokenGenerator;
+        this.passwordResetDeliveryService = passwordResetDeliveryService;
         this.tokenHasher = tokenHasher;
         this.currentUserMapper = currentUserMapper;
     }
@@ -133,6 +153,68 @@ public class AuthService {
      */
     public CurrentUserResponse currentUser(CurrentPrincipal principal) {
         return currentUserMapper.fromPrincipal(principal);
+    }
+
+    /**
+     * 发起邮箱找回密码。响应不暴露邮箱是否存在，匹配账号时生成一次性令牌并进入投递边界。
+     */
+    @Transactional
+    public PasswordResetAcceptedResponse requestPasswordReset(PasswordResetRequest request) {
+        String email = request.email().trim().toLowerCase(Locale.ROOT);
+        Instant now = Instant.now();
+
+        userAccountRepository.findActiveByPersonalEmail(email).ifPresent(userAccount -> {
+            PasswordResetToken token = passwordResetTokenGenerator.generate(now);
+            passwordResetTokenRepository.create(userAccount.id(), token.tokenHash(), email, token.expiresAt(), now);
+            passwordResetDeliveryService.deliver(userAccount, email, token.rawToken());
+        });
+
+        return new PasswordResetAcceptedResponse(true, "如果邮箱已绑定账号，系统会发送密码重置指引");
+    }
+
+    /**
+     * 使用邮箱令牌重置密码。成功后消费令牌并撤销该账号全部 session。
+     */
+    @Transactional
+    public PasswordResetConfirmResponse confirmPasswordReset(PasswordResetConfirmRequest request) {
+        Instant now = Instant.now();
+        String tokenHash = tokenHasher.sha256(request.token().trim());
+        var tokenRecord = passwordResetTokenRepository.findActiveByTokenHash(tokenHash, now)
+                .orElseThrow(() -> ApiExceptions.validation("重置令牌无效或已过期", Map.of("field", "token")));
+
+        UserAccount userAccount = userAccountRepository.findById(tokenRecord.userId())
+                .orElseThrow(() -> ApiExceptions.notFound("账号不存在"));
+        if (!userAccount.isActive()) {
+            throw ApiExceptions.forbidden("账号当前不可用");
+        }
+
+        userAccountRepository.updatePasswordHash(userAccount.id(), passwordService.hash(request.newPassword()), now);
+        passwordResetTokenRepository.markConsumed(tokenRecord.id(), now);
+        userSessionRepository.revokeAllActiveSessions(userAccount.id(), now);
+        return new PasswordResetConfirmResponse(true);
+    }
+
+    /**
+     * 当前用户自助注销账号：校验密码后软禁用账号，并撤销全部 session。
+     */
+    @Transactional
+    public void deleteOwnAccount(CurrentPrincipal principal, String password) {
+        UserAccount userAccount = userAccountRepository.findById(principal.id())
+                .orElseThrow(() -> ApiExceptions.notFound("账号不存在"));
+
+        if (userAccount.hasRole(SecurityProperties.SUPER_ADMIN_ROLE)) {
+            throw ApiExceptions.forbidden("超级管理员账号不能自助注销，请先移交权限");
+        }
+        if (!userAccount.isActive()) {
+            throw ApiExceptions.forbidden("账号当前不可用");
+        }
+        if (!passwordService.matches(password, userAccount.passwordHash())) {
+            throw ApiExceptions.validation("密码不正确", Map.of("field", "password"));
+        }
+
+        Instant now = Instant.now();
+        userAccountRepository.updateAccountStatus(userAccount.id(), "DISABLED", now);
+        userSessionRepository.revokeAllActiveSessions(userAccount.id(), now);
     }
 
     /**

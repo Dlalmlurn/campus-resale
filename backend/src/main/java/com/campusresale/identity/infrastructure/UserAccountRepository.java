@@ -1,10 +1,13 @@
 // 文件功能：封装 users、roles、user_roles 的用户账号数据库读写。
 package com.campusresale.identity.infrastructure;
 
+import com.campusresale.identity.domain.AdminUserAccountRecord;
 import com.campusresale.identity.domain.UserAccount;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.Locale;
 import java.time.Instant;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -63,6 +66,23 @@ public class UserAccountRepository {
                 userId
         );
 
+        return users.stream().findFirst().map(this::withRoles);
+    }
+
+    /**
+     * 按个人邮箱查找可用账号，用于密码找回发起流程。
+     */
+    public Optional<UserAccount> findActiveByPersonalEmail(String email) {
+        // 邮箱匹配大小写不敏感；只允许 ACTIVE 账号进入找回流程。
+        List<UserAccount> users = jdbcTemplate.query("""
+                        SELECT id, username, password_hash, nickname, account_status
+                        FROM users
+                        WHERE lower(personal_email) = ?
+                          AND account_status = 'ACTIVE'
+                        """,
+                new UserAccountRowMapper(),
+                email.toLowerCase(Locale.ROOT)
+        );
         return users.stream().findFirst().map(this::withRoles);
     }
 
@@ -129,6 +149,139 @@ public class UserAccountRepository {
     }
 
     /**
+     * 移除指定角色；后台账号管理撤销权限时使用。
+     */
+    public void removeRole(long userId, String roleCode) {
+        jdbcTemplate.update("""
+                        DELETE FROM user_roles ur
+                        USING roles r
+                        WHERE ur.role_id = r.id
+                          AND ur.user_id = ?
+                          AND r.code = ?
+                        """,
+                userId,
+                roleCode
+        );
+    }
+
+    /**
+     * 判断角色 code 是否存在，避免写入拼写错误的角色。
+     */
+    public boolean roleExists(String roleCode) {
+        Boolean exists = jdbcTemplate.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM roles WHERE code = ?)",
+                Boolean.class,
+                roleCode
+        );
+        return Boolean.TRUE.equals(exists);
+    }
+
+    /**
+     * 修改用户密码哈希，找回密码成功后调用。
+     */
+    public void updatePasswordHash(long userId, String passwordHash, Instant now) {
+        jdbcTemplate.update("""
+                        UPDATE users
+                        SET password_hash = ?,
+                            updated_at = ?
+                        WHERE id = ?
+                        """,
+                passwordHash,
+                Timestamp.from(now),
+                userId
+        );
+    }
+
+    /**
+     * 更新账号状态；DISABLED 会同时写 disabled_at，ACTIVE/LOCKED 会清空 disabled_at。
+     */
+    public void updateAccountStatus(long userId, String accountStatus, Instant now) {
+        jdbcTemplate.update("""
+                        UPDATE users
+                        SET account_status = ?,
+                            disabled_at = CASE WHEN ? = 'DISABLED' THEN ? ELSE NULL END,
+                            updated_at = ?
+                        WHERE id = ?
+                        """,
+                accountStatus,
+                accountStatus,
+                Timestamp.from(now),
+                Timestamp.from(now),
+                userId
+        );
+    }
+
+    /**
+     * 后台账号管理按 id 查询完整记录。
+     */
+    public Optional<AdminUserAccountRecord> findAdminRecordById(long userId) {
+        List<AdminUserAccountRecord> users = jdbcTemplate.query("""
+                        SELECT id, username, nickname, personal_email, account_status, disabled_at, created_at, updated_at
+                        FROM users
+                        WHERE id = ?
+                        """,
+                new AdminUserAccountRowMapper(),
+                userId
+        );
+        return users.stream().findFirst().map(this::withAdminRoles);
+    }
+
+    /**
+     * 统计后台账号列表行数。
+     */
+    public long countAdminUsers(String keyword, String accountStatus, String roleCode) {
+        List<Object> params = new ArrayList<>();
+        String where = buildAdminUserWhere(keyword, accountStatus, roleCode, params);
+        Long count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM users u" + where, Long.class, params.toArray());
+        return count == null ? 0L : count;
+    }
+
+    /**
+     * 分页查询后台账号列表。
+     */
+    public List<AdminUserAccountRecord> listAdminUsers(
+            String keyword,
+            String accountStatus,
+            String roleCode,
+            int page,
+            int pageSize
+    ) {
+        List<Object> params = new ArrayList<>();
+        String where = buildAdminUserWhere(keyword, accountStatus, roleCode, params);
+        params.add(pageSize);
+        params.add((page - 1) * pageSize);
+
+        List<AdminUserAccountRecord> users = jdbcTemplate.query("""
+                        SELECT id, username, nickname, personal_email, account_status, disabled_at, created_at, updated_at
+                        FROM users u
+                        """ + where + """
+                        ORDER BY created_at DESC, id DESC
+                        LIMIT ? OFFSET ?
+                        """,
+                new AdminUserAccountRowMapper(),
+                params.toArray()
+        );
+        return users.stream().map(this::withAdminRoles).toList();
+    }
+
+    /**
+     * 统计仍可登录的超级管理员数量，用于保护最后一个超管。
+     */
+    public long countActiveSuperAdmins() {
+        Long count = jdbcTemplate.queryForObject("""
+                        SELECT COUNT(*)
+                        FROM users u
+                        JOIN user_roles ur ON ur.user_id = u.id
+                        JOIN roles r ON r.id = ur.role_id
+                        WHERE r.code = 'SUPER_ADMIN'
+                          AND u.account_status = 'ACTIVE'
+                        """,
+                Long.class
+        );
+        return count == null ? 0L : count;
+    }
+
+    /**
      * 补齐用户角色集合，保持 Repository 对外返回完整 UserAccount。
      */
     private UserAccount withRoles(UserAccount userAccount) {
@@ -153,6 +306,66 @@ public class UserAccountRepository {
         );
     }
 
+    private AdminUserAccountRecord withAdminRoles(AdminUserAccountRecord userAccount) {
+        Set<String> roles = new LinkedHashSet<>(jdbcTemplate.queryForList("""
+                        SELECT r.code
+                        FROM roles r
+                        JOIN user_roles ur ON ur.role_id = r.id
+                        WHERE ur.user_id = ?
+                        ORDER BY r.code
+                        """,
+                String.class,
+                userAccount.id()
+        ));
+        return new AdminUserAccountRecord(
+                userAccount.id(),
+                userAccount.username(),
+                userAccount.nickname(),
+                userAccount.personalEmail(),
+                userAccount.accountStatus(),
+                userAccount.disabledAt(),
+                userAccount.createdAt(),
+                userAccount.updatedAt(),
+                roles
+        );
+    }
+
+    private String buildAdminUserWhere(String keyword, String accountStatus, String roleCode, List<Object> params) {
+        List<String> conditions = new ArrayList<>();
+
+        if (keyword != null && !keyword.isBlank()) {
+            String normalizedKeyword = "%" + keyword.trim().toLowerCase(Locale.ROOT) + "%";
+            conditions.add("""
+                    (
+                        lower(u.username) LIKE ?
+                        OR lower(u.nickname) LIKE ?
+                        OR lower(COALESCE(u.personal_email, '')) LIKE ?
+                    )
+                    """);
+            params.add(normalizedKeyword);
+            params.add(normalizedKeyword);
+            params.add(normalizedKeyword);
+        }
+        if (accountStatus != null && !accountStatus.isBlank()) {
+            conditions.add("u.account_status = ?");
+            params.add(accountStatus.trim().toUpperCase(Locale.ROOT));
+        }
+        if (roleCode != null && !roleCode.isBlank()) {
+            conditions.add("""
+                    EXISTS (
+                        SELECT 1
+                        FROM user_roles ur
+                        JOIN roles r ON r.id = ur.role_id
+                        WHERE ur.user_id = u.id
+                          AND r.code = ?
+                    )
+                    """);
+            params.add(roleCode.trim().toUpperCase(Locale.ROOT));
+        }
+
+        return conditions.isEmpty() ? "" : " WHERE " + String.join(" AND ", conditions);
+    }
+
     private String blankToNull(String value) {
         // 邮箱等可选字符串字段：空白输入按 null 保存，避免数据库里存无意义空串。
         return value == null || value.isBlank() ? null : value.trim();
@@ -171,6 +384,28 @@ public class UserAccountRepository {
                     resultSet.getString("password_hash"),
                     resultSet.getString("nickname"),
                     resultSet.getString("account_status"),
+                    Set.of()
+            );
+        }
+    }
+
+    /**
+     * 把 users 表的一行后台账号字段映射为 AdminUserAccountRecord；角色稍后补齐。
+     */
+    private static class AdminUserAccountRowMapper implements RowMapper<AdminUserAccountRecord> {
+
+        @Override
+        public AdminUserAccountRecord mapRow(ResultSet resultSet, int rowNum) throws SQLException {
+            Timestamp disabledAt = resultSet.getTimestamp("disabled_at");
+            return new AdminUserAccountRecord(
+                    resultSet.getLong("id"),
+                    resultSet.getString("username"),
+                    resultSet.getString("nickname"),
+                    resultSet.getString("personal_email"),
+                    resultSet.getString("account_status"),
+                    disabledAt == null ? null : disabledAt.toInstant(),
+                    resultSet.getTimestamp("created_at").toInstant(),
+                    resultSet.getTimestamp("updated_at").toInstant(),
                     Set.of()
             );
         }

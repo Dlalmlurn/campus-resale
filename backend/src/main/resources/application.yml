@@ -46,3 +46,8 @@ campus-resale:
     api-key: ${CAMPUS_RESALE_AI_API_KEY:}
     model: ${CAMPUS_RESALE_AI_MODEL:deepseek-chat}
     timeout-ms: ${CAMPUS_RESALE_AI_TIMEOUT_MS:6000}
+  auth:
+    password-reset:
+      # 邮件正文中的前端入口。NAS 公网部署时建议配置为真实 HTTPS 域名。
+      frontend-base-url: ${CAMPUS_RESALE_FRONTEND_BASE_URL:http://localhost:3000}
+      from: ${CAMPUS_RESALE_PASSWORD_RESET_FROM:}

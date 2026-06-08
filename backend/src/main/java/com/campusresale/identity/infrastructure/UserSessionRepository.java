@@ -142,6 +142,21 @@ public class UserSessionRepository {
     }
 
     /**
+     * 撤销用户全部活跃 session；用于禁用账号、注销账号和密码重置后强制重新登录。
+     */
+    public void revokeAllActiveSessions(long userId, Instant now) {
+        jdbcTemplate.update("""
+                        UPDATE user_sessions
+                        SET revoked_at = ?
+                        WHERE user_id = ?
+                          AND revoked_at IS NULL
+                        """,
+                Timestamp.from(now),
+                userId
+        );
+    }
+
+    /**
      * 把 user_sessions 表的一行映射成 UserSessionRecord。
      */
     private static class UserSessionRowMapper implements RowMapper<UserSessionRecord> {

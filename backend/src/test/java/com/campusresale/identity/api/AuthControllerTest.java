@@ -125,6 +125,64 @@ class AuthControllerTest {
         verify(authService).logout(eq("raw-token"));
     }
 
+    @Test
+    void passwordResetRequestReturnsAcceptedResponse() throws Exception {
+        when(authService.requestPasswordReset(any())).thenReturn(new PasswordResetAcceptedResponse(
+                true,
+                "如果邮箱已绑定账号，系统会发送密码重置指引"
+        ));
+
+        mockMvc.perform(post("/api/auth/password-reset/request")
+                        .header(HttpHeaders.ORIGIN, LOCAL_ORIGIN)
+                        .contentType("application/json")
+                        .content("""
+                                {"email":"student@example.edu"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accepted").value(true));
+    }
+
+    @Test
+    void passwordResetConfirmReturnsResetResponse() throws Exception {
+        when(authService.confirmPasswordReset(any())).thenReturn(new PasswordResetConfirmResponse(true));
+
+        mockMvc.perform(post("/api/auth/password-reset/confirm")
+                        .header(HttpHeaders.ORIGIN, LOCAL_ORIGIN)
+                        .contentType("application/json")
+                        .content("""
+                                {"token":"raw-token","newPassword":"new-password"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reset").value(true));
+    }
+
+    @Test
+    void deleteOwnAccountRequiresLoginAndClearsCookie() throws Exception {
+        CurrentPrincipal principal = new CurrentPrincipal(
+                1L,
+                "student_demo",
+                "认证学生演示账号",
+                "ACTIVE",
+                Set.of("REGISTERED_USER"),
+                10L,
+                Instant.now().plusSeconds(60),
+                Instant.now().plusSeconds(120)
+        );
+
+        mockMvc.perform(post("/api/auth/me/delete")
+                        .header(HttpHeaders.ORIGIN, LOCAL_ORIGIN)
+                        .requestAttr(CurrentPrincipalContext.REQUEST_ATTRIBUTE, principal)
+                        .contentType("application/json")
+                        .content("""
+                                {"password":"520zikejiang"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("Max-Age=0")))
+                .andExpect(jsonPath("$.deleted").value(true));
+
+        verify(authService).deleteOwnAccount(principal, "520zikejiang");
+    }
+
     private CurrentUserResponse currentUser() {
         return new CurrentUserResponse(
                 1L,

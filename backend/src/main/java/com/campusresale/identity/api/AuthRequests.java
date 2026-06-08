@@ -1,4 +1,4 @@
-// 文件功能：定义 Auth API 的注册和登录请求体及字段校验规则。
+// 文件功能：定义 Auth API 的注册、登录、找回密码和注销请求体及字段校验规则。
 package com.campusresale.identity.api;
 
 import jakarta.validation.constraints.Email;
@@ -7,7 +7,7 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 /**
- * Auth API 请求体定义，集中声明注册和登录字段校验规则。
+ * Auth API 请求体定义，集中声明注册、登录、找回密码和注销字段校验规则。
  */
 public final class AuthRequests {
 
@@ -66,6 +66,46 @@ public final class AuthRequests {
             @Pattern(regexp = USERNAME_PATTERN, message = USERNAME_MESSAGE)
             String username,
 
+            @NotBlank(message = "密码不能为空")
+            String password
+    ) {
+    }
+
+    /**
+     * 发起密码找回请求体。
+     *
+     * @param email 注册时填写的个人邮箱；接口会统一返回受理，避免暴露邮箱是否存在。
+     */
+    public record PasswordResetRequest(
+            @NotBlank(message = "邮箱不能为空")
+            @Email(message = "邮箱格式不正确")
+            @Size(max = 160, message = "邮箱不能超过 160 个字符")
+            String email
+    ) {
+    }
+
+    /**
+     * 使用邮箱令牌重置密码请求体。
+     *
+     * @param token 邮件中的一次性重置令牌，服务端只保存其 SHA-256 hash。
+     * @param newPassword 新密码，沿用注册密码长度规则。
+     */
+    public record PasswordResetConfirmRequest(
+            @NotBlank(message = "重置令牌不能为空")
+            String token,
+
+            @NotBlank(message = "新密码不能为空")
+            @Size(min = 8, max = 120, message = "密码长度必须在 8 到 120 个字符之间")
+            String newPassword
+    ) {
+    }
+
+    /**
+     * 自助注销请求体。
+     *
+     * @param password 当前账号密码；用于防止他人借已登录浏览器误注销账号。
+     */
+    public record DeleteAccountRequest(
             @NotBlank(message = "密码不能为空")
             String password
     ) {
