@@ -50,8 +50,8 @@ export function getGoodsDetail(id: number) {
   return apiRequest<GoodsSummary>(`/api/goods/${id}`);
 }
 
-export function getMyGoods() {
-  return apiRequest<PageResponse<GoodsSummary>>("/api/goods/mine");
+export function getMyGoods(filters: Record<string, string | number | null | undefined> = {}) {
+  return apiRequest<PageResponse<GoodsSummary>>(`/api/goods/mine${queryString(filters)}`);
 }
 
 export function createGoodsDraft(request: GoodsUpsertRequest) {

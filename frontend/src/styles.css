@@ -61,6 +61,10 @@ h2 { letter-spacing: 0; }
 .search-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) 210px auto; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
 .search-field, .select-field { display: flex; min-height: 42px; align-items: center; gap: 9px; padding: 0 11px; border: 1px solid #dfe6e2; border-radius: 8px; color: #718092; background: #fafcfb; }
 .search-field input, .select-field select { width: 100%; border: 0; outline: 0; color: var(--ink); background: transparent; }
+.market-filter-row { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.compact-filter-field { display: grid; gap: 5px; min-width: 0; }
+.compact-filter-field span { color: #475566; font-size: 0.74rem; font-weight: 800; }
+.compact-filter-field input, .compact-filter-field select { min-width: 0; width: 100%; min-height: 38px; padding: 8px 10px; border: 1px solid #dfe6e2; border-radius: 8px; outline: 0; color: var(--ink); background: #fafcfb; }
 .primary-button, .secondary-button, .text-button { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: 7px; padding: 0 14px; border-radius: 8px; font-weight: 800; }
 .primary-button { border: 1px solid var(--green); color: #fff; background: var(--green); }
 .primary-button:hover { background: var(--green-dark); }
@@ -136,6 +140,9 @@ h2 { letter-spacing: 0; }
 .seller-item:last-child { border-bottom: 0; }
 .seller-item > div:first-child { display: flex; justify-content: space-between; gap: 12px; }
 .seller-item small { color: #c04e2b; font-weight: 900; }
+.seller-filter-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 4px; }
+.seller-filter-tabs button { min-height: 30px; padding: 0 9px; border: 1px solid #d6e4de; border-radius: 8px; color: #506071; background: #f8fbfa; font-size: 0.76rem; font-weight: 800; }
+.seller-filter-tabs button.active { border-color: #9ecbb9; color: var(--green-dark); background: var(--green-soft); }
 
 .badge-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 9px 0; }
 .badge { display: inline-flex; min-height: 24px; align-items: center; padding: 0 8px; border-radius: 999px; font-size: 0.73rem; font-weight: 800; }
@@ -345,7 +352,7 @@ h2 { letter-spacing: 0; }
   .nav-button { flex: 0 0 auto; }
   .page-heading { padding-top: 28px; }
   .market-stat { display: none; }
-  .search-toolbar { grid-template-columns: 1fr; }
+  .search-toolbar, .market-filter-row { grid-template-columns: 1fr; }
   .goods-grid, .form-grid { grid-template-columns: 1fr; }
   .admin-demo-guide, .admin-tabs--wide, .log-filter-bar, .stat-grid, .status-bar-row, .notification-row { grid-template-columns: 1fr; }
   .goods-image { height: 174px; }

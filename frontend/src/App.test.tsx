@@ -53,9 +53,31 @@ describe("App", () => {
     render(<App />);
 
     await waitFor(() => expect(screen.getByText("数据库原理教材")).toBeInTheDocument());
+    expect(screen.getByText("#10 · 轻度使用")).toBeInTheDocument();
     expect(screen.getByText("1")).toBeInTheDocument();
     expect(screen.getByText("件在售商品")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "登录" })).toBeInTheDocument();
+  });
+
+  it("sends enhanced discovery filters to the goods search API", async () => {
+    const fetchMock = stubBackend();
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByText("数据库原理教材")).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText("分类"), { target: { value: "1" } });
+    fireEvent.change(screen.getByLabelText("最低价"), { target: { value: "20" } });
+    fireEvent.change(screen.getByLabelText("最高价"), { target: { value: "60" } });
+    fireEvent.change(screen.getByLabelText("成色"), { target: { value: "LIGHTLY_USED" } });
+    fireEvent.change(screen.getByLabelText("地点"), { target: { value: "1" } });
+    fireEvent.change(screen.getByLabelText("排序"), { target: { value: "PRICE_ASC" } });
+    fireEvent.click(screen.getByRole("button", { name: "搜索" }));
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([input]) => String(input).includes(
+        "/api/goods?categoryId=1&minPrice=20&maxPrice=60&conditionLevel=LIGHTLY_USED&placeId=1&sort=PRICE_ASC"
+      ))).toBe(true);
+    });
   });
 
   it("guards seller publishing behind login", async () => {
@@ -204,12 +226,28 @@ describe("App", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "发布" }));
     await waitFor(() => expect(screen.getByText("AI 发布辅助")).toBeInTheDocument());
+    expect(screen.getByText("我的全部发布")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("商品标题"), { target: { value: "旧书" } });
     fireEvent.change(screen.getByLabelText("商品描述"), { target: { value: "数据库课程复习资料，包含笔记。" } });
     fireEvent.click(screen.getByRole("button", { name: "生成优化建议" }));
 
     await waitFor(() => expect(screen.getByText("数据库课程复习资料")).toBeInTheDocument());
     expect(screen.getByText("AI 仅提供辅助建议，不会自动审核、下架或处罚。")).toBeInTheDocument();
+  });
+
+  it("filters seller-owned goods by publish status", async () => {
+    const fetchMock = stubBackend(verifiedSeller);
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByText("小林同学")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "发布" }));
+
+    await waitFor(() => expect(screen.getByText("我的全部发布")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "已售" }));
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/api/goods/mine?status=SOLD&pageSize=50"))).toBe(true);
+    });
   });
 
   it("lets buyers favorite goods and follow sellers from discovery cards", async () => {
@@ -227,7 +265,7 @@ describe("App", () => {
 });
 
 function stubBackend(currentUser?: CurrentUser) {
-  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     const path = url.replace(/^http:\/\/localhost/, "");
     if (url === "/api/auth/me") {
@@ -287,6 +325,27 @@ function stubBackend(currentUser?: CurrentUser) {
     if (url.startsWith("/api/admin/sensitive-access-logs")) return response({ items: [], page: 1, pageSize: 20, total: 0 });
     if (url.startsWith("/api/admin/verifications")) return response({ items: [], page: 1, pageSize: 20, total: 0 });
     if (url.startsWith("/api/admin/goods")) return response({ items: [], page: 1, pageSize: 20, total: 0 });
+    if (url.startsWith("/api/goods/mine")) {
+      return response({
+        items: [{
+          id: 12,
+          title: "科学计算器",
+          description: "考试允许型号，功能正常。",
+          conditionLevel: "LIKE_NEW",
+          listPrice: "39.00",
+          status: url.includes("status=SOLD") ? "SOLD" : "ON_SALE",
+          auditStatus: "APPROVED",
+          seller: { id: 11, nickname: "小林同学" },
+          category: { id: 1, code: "BOOKS", name: "教材资料" },
+          primaryImage: null,
+          publishedAt: "2026-05-26T00:00:00Z",
+          recommendationReason: "成色较新，适合优先比较"
+        }],
+        page: 1,
+        pageSize: 50,
+        total: 1
+      });
+    }
     if (url === "/api/notifications/unread-count") return response({ unreadCount: 1 });
     if (url.startsWith("/api/notifications?")) return response({
       items: [{
@@ -432,7 +491,9 @@ function stubBackend(currentUser?: CurrentUser) {
       });
     }
     return response({ code: "NOT_FOUND", message: "未找到", details: {} }, 404);
-  }));
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
 }
 
 function pendingOrder() {

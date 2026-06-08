@@ -129,6 +129,21 @@ const verificationStatusLabels: Record<string, string> = {
   REJECTED: "已驳回",
   INVALID: "已失效"
 };
+const marketSortLabels: Record<string, string> = {
+  RECOMMENDED: "推荐优先",
+  LATEST: "最新发布",
+  PRICE_ASC: "价格从低到高",
+  PRICE_DESC: "价格从高到低"
+};
+const sellerStatusFilters: Array<{ value: string; label: string }> = [
+  { value: "", label: "全部" },
+  { value: "DRAFT", label: "草稿" },
+  { value: "PENDING_REVIEW", label: "待审核" },
+  { value: "ON_SALE", label: "在售" },
+  { value: "RESERVED", label: "已预订" },
+  { value: "SOLD", label: "已售" },
+  { value: "OFF_SHELF", label: "已下架" }
+];
 
 export function App() {
   const [route, setRoute] = useState<Route>(() => parseRoute());
@@ -139,6 +154,11 @@ export function App() {
   const [goodsTotal, setGoodsTotal] = useState(0);
   const [query, setQuery] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [minPrice, setMinPrice] = useState("");
+  const [maxPrice, setMaxPrice] = useState("");
+  const [conditionLevel, setConditionLevel] = useState("");
+  const [placeId, setPlaceId] = useState("");
+  const [marketSort, setMarketSort] = useState("RECOMMENDED");
   const [loadingGoods, setLoadingGoods] = useState(true);
   const [notice, setNotice] = useState<{ tone: "success" | "error"; text: string } | null>(null);
 
@@ -159,7 +179,15 @@ export function App() {
   const refreshGoods = useCallback(async () => {
     setLoadingGoods(true);
     try {
-      const response = await getPublicGoods({ keyword: query, categoryId, sort: "RECOMMENDED" });
+      const response = await getPublicGoods({
+        keyword: query,
+        categoryId,
+        minPrice,
+        maxPrice,
+        conditionLevel,
+        placeId,
+        sort: marketSort
+      });
       setPublicGoods(response.items);
       setGoodsTotal(response.total);
     } catch (error) {
@@ -167,7 +195,7 @@ export function App() {
     } finally {
       setLoadingGoods(false);
     }
-  }, [categoryId, notify, query]);
+  }, [categoryId, conditionLevel, marketSort, maxPrice, minPrice, notify, placeId, query]);
 
   useEffect(() => {
     const onHashChange = () => setRoute(parseRoute());
@@ -308,8 +336,18 @@ export function App() {
             currentUser={currentUser}
             query={query}
             categoryId={categoryId}
+            minPrice={minPrice}
+            maxPrice={maxPrice}
+            conditionLevel={conditionLevel}
+            placeId={placeId}
+            sort={marketSort}
             onQueryChange={setQuery}
             onCategoryChange={setCategoryId}
+            onMinPriceChange={setMinPrice}
+            onMaxPriceChange={setMaxPrice}
+            onConditionChange={setConditionLevel}
+            onPlaceChange={setPlaceId}
+            onSortChange={setMarketSort}
             onSearch={() => void refreshGoods()}
             onOpen={(id) => navigate({ name: "goods", id })}
             notify={notify}
@@ -339,8 +377,18 @@ function MarketPage(props: {
   currentUser: CurrentUser | null;
   query: string;
   categoryId: string;
+  minPrice: string;
+  maxPrice: string;
+  conditionLevel: string;
+  placeId: string;
+  sort: string;
   onQueryChange: (value: string) => void;
   onCategoryChange: (value: string) => void;
+  onMinPriceChange: (value: string) => void;
+  onMaxPriceChange: (value: string) => void;
+  onConditionChange: (value: string) => void;
+  onPlaceChange: (value: string) => void;
+  onSortChange: (value: string) => void;
   onSearch: () => void;
   onOpen: (id: number) => void;
   notify: Notify;
@@ -383,12 +431,42 @@ function MarketPage(props: {
         </label>
         <label className="select-field">
           <Filter size={17} />
-          <select value={props.categoryId} onChange={(event) => props.onCategoryChange(event.target.value)}>
+          <select aria-label="分类" value={props.categoryId} onChange={(event) => props.onCategoryChange(event.target.value)}>
             <option value="">全部分类</option>
             {props.catalog.categories.map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}
           </select>
         </label>
         <button className="primary-button" type="button" onClick={props.onSearch}>搜索</button>
+        <div className="market-filter-row">
+          <label className="compact-filter-field">
+            <span>最低价</span>
+            <input min="0" step="0.01" type="number" value={props.minPrice} onChange={(event) => props.onMinPriceChange(event.target.value)} placeholder="不限" />
+          </label>
+          <label className="compact-filter-field">
+            <span>最高价</span>
+            <input min="0" step="0.01" type="number" value={props.maxPrice} onChange={(event) => props.onMaxPriceChange(event.target.value)} placeholder="不限" />
+          </label>
+          <label className="compact-filter-field">
+            <span>成色</span>
+            <select value={props.conditionLevel} onChange={(event) => props.onConditionChange(event.target.value)}>
+              <option value="">全部成色</option>
+              {Object.entries(conditionLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+            </select>
+          </label>
+          <label className="compact-filter-field">
+            <span>地点</span>
+            <select value={props.placeId} onChange={(event) => props.onPlaceChange(event.target.value)}>
+              <option value="">全部地点</option>
+              {props.catalog.places.map((place) => <option value={place.id} key={place.id}>{place.campus} · {place.name}</option>)}
+            </select>
+          </label>
+          <label className="compact-filter-field">
+            <span>排序</span>
+            <select value={props.sort} onChange={(event) => props.onSortChange(event.target.value)}>
+              {Object.entries(marketSortLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+            </select>
+          </label>
+        </div>
       </section>
       <section className="goods-grid" aria-label="商品列表">
         {props.loading ? <LoadingBlock /> : props.goods.length === 0 ? <EmptyBlock title="暂时没有匹配商品" /> : props.goods.map((item) => (
@@ -398,7 +476,7 @@ function MarketPage(props: {
               <div className="goods-card-body">
                 <div className="goods-card-topline">
                   <span>{item.category.name}</span>
-                  <span>{conditionLabels[item.conditionLevel] ?? item.conditionLevel}</span>
+                  <span>#{item.id} · {conditionLabels[item.conditionLevel] ?? item.conditionLevel}</span>
                 </div>
                 <h2>{item.title}</h2>
                 <p>{item.description}</p>
@@ -536,6 +614,7 @@ function GoodsDetailPage(props: { id: number; catalog: Catalog; currentUser: Cur
           <strong className="detail-price">¥{item.listPrice}</strong>
           <p>{item.description}</p>
           <dl className="detail-list">
+            <div><dt>商品 ID</dt><dd>#{item.id}</dd></div>
             <div><dt>分类</dt><dd>{item.category.name}</dd></div>
             <div><dt>卖家</dt><dd>{item.seller.nickname}</dd></div>
             <div><dt>发布时间</dt><dd>{formatDate(item.publishedAt)}</dd></div>
@@ -741,6 +820,7 @@ function VerificationPage(props: { currentUser: CurrentUser; onUserChange: (user
 
 function SellerPage(props: { catalog: Catalog; notify: Notify }) {
   const [items, setItems] = useState<GoodsSummary[]>([]);
+  const [statusFilter, setStatusFilter] = useState("");
   const [files, setFiles] = useState<StoredFileSummary[]>([]);
   const [busy, setBusy] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
@@ -760,11 +840,11 @@ function SellerPage(props: { catalog: Catalog; notify: Notify }) {
 
   const load = useCallback(async () => {
     try {
-      setItems((await getMyGoods()).items);
+      setItems((await getMyGoods({ status: statusFilter, pageSize: 50 })).items);
     } catch (error) {
       props.notify("error", messageOf(error));
     }
-  }, [props.notify]);
+  }, [props.notify, statusFilter]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -890,9 +970,16 @@ function SellerPage(props: { catalog: Catalog; notify: Notify }) {
           )}
         </aside>
         <aside className="side-panel">
-          <div className="panel-title"><h2>我的商品</h2><button className="icon-button subtle" aria-label="刷新商品" type="button" onClick={() => void load()}><RefreshCw size={17} /></button></div>
+          <div className="panel-title"><h2>我的全部发布</h2><button className="icon-button subtle" aria-label="刷新商品" type="button" onClick={() => void load()}><RefreshCw size={17} /></button></div>
+          <div className="seller-filter-tabs" aria-label="我的发布商品状态筛选">
+            {sellerStatusFilters.map((filter) => (
+              <button className={statusFilter === filter.value ? "active" : ""} type="button" key={filter.value || "ALL"} onClick={() => setStatusFilter(filter.value)}>
+                {filter.label}
+              </button>
+            ))}
+          </div>
           {items.length === 0 ? <EmptyBlock title="还没有发布记录" /> : items.map((item) => <div className="seller-item" key={item.id}>
-            <div><strong>{item.title}</strong><small>¥{item.listPrice}</small></div>
+            <div><strong>{item.title}</strong><small>#{item.id} · ¥{item.listPrice}</small></div>
             <div className="badge-row"><StatusBadge value={item.status} labels={goodsStatusLabels} /><StatusBadge value={item.auditStatus} labels={auditStatusLabels} /></div>
             {item.status === "DRAFT" && <button className="text-button" disabled={busy} type="button" onClick={() => void submit(item.id)}>提交审核 <ChevronRight size={16} /></button>}
           </div>)}
