@@ -254,6 +254,21 @@ public class OrderRepository {
         );
     }
 
+    public List<Long> listExpiredPendingPaymentOrderIds(Instant paymentStartedBefore, int limit) {
+        return jdbcTemplate.query("""
+                        SELECT id
+                        FROM trade_orders
+                        WHERE status = 'PENDING_PAYMENT'
+                          AND updated_at <= ?
+                        ORDER BY updated_at ASC, id ASC
+                        LIMIT ?
+                        """,
+                (rs, rowNum) -> rs.getLong("id"),
+                Timestamp.from(paymentStartedBefore),
+                limit
+        );
+    }
+
     public void insertStateRecord(
             long orderId,
             TradeOrderStatus fromStatus,
@@ -361,6 +376,19 @@ public class OrderRepository {
                         """,
                 Timestamp.from(paidAt),
                 paymentId
+        );
+    }
+
+    public int closeActivePaymentsByOrder(long orderId, Instant now) {
+        return jdbcTemplate.update("""
+                        UPDATE payment_orders
+                        SET status = 'CLOSED',
+                            closed_at = COALESCE(closed_at, ?)
+                        WHERE order_id = ?
+                          AND status IN ('PENDING', 'PROCESSING')
+                        """,
+                Timestamp.from(now),
+                orderId
         );
     }
 
@@ -597,7 +625,7 @@ public class OrderRepository {
         return next == null ? 1 : next;
     }
 
-    public void createSucceededSettlementAttempt(long settlementId, int attemptNo, BigDecimal amount, long adminId, Instant now) {
+    public void createSucceededSettlementAttempt(long settlementId, int attemptNo, BigDecimal amount, Long adminId, Instant now) {
         jdbcTemplate.update("""
                         INSERT INTO settlement_attempts (
                             settlement_record_id,
@@ -629,7 +657,7 @@ public class OrderRepository {
                             settled_at = COALESCE(settled_at, ?),
                             updated_at = ?
                         WHERE id = ?
-                          AND status IN ('PENDING', 'FAILED')
+                          AND status IN ('PENDING', 'PROCESSING', 'FAILED')
                         """,
                 Timestamp.from(settledAt),
                 Timestamp.from(settledAt),

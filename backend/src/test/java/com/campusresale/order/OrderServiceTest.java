@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -25,6 +26,7 @@ import com.campusresale.platform.audit.AuditLogRepository;
 import com.campusresale.platform.security.CurrentPrincipal;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -92,7 +94,7 @@ class OrderServiceTest {
 
     @Test
     void simulatePaymentEscrowsPaymentAndMovesOrderForward() {
-        TradeOrderRecord order = order(TradeOrderStatus.PENDING_PAYMENT);
+        TradeOrderRecord order = order(TradeOrderStatus.PENDING_PAYMENT, Instant.now());
         PaymentOrderRecord pendingPayment = payment(PaymentOrderStatus.PENDING);
         PaymentOrderRecord escrowedPayment = payment(PaymentOrderStatus.ESCROWED);
         when(orderRepository.findOrderByIdForUpdate(500L)).thenReturn(Optional.of(order));
@@ -146,6 +148,63 @@ class OrderServiceTest {
     }
 
     @Test
+    void cancelExpiredPendingPaymentsClosesOrderAndReleasesGoods() {
+        when(orderRepository.listExpiredPendingPaymentOrderIds(any(), eq(20))).thenReturn(List.of(500L));
+        when(orderRepository.findOrderByIdForUpdate(500L)).thenReturn(Optional.of(order(TradeOrderStatus.PENDING_PAYMENT)));
+        when(orderRepository.updateOrderStatus(eq(500L), eq(TradeOrderStatus.PENDING_PAYMENT), eq(TradeOrderStatus.CANCELLED), any(), eq(true)))
+                .thenReturn(1);
+
+        int cancelled = service.cancelExpiredPendingPayments();
+
+        assertThat(cancelled).isEqualTo(1);
+        verify(orderRepository).insertStateRecord(
+                500L,
+                TradeOrderStatus.PENDING_PAYMENT,
+                TradeOrderStatus.CANCELLED,
+                "PAYMENT_TIMEOUT_CANCELLED",
+                null,
+                null,
+                "待付款超过 15 分钟自动取消"
+        );
+        verify(goodsRepository).releaseReservation(100L, 500L);
+        verify(orderRepository).closeActivePaymentsByOrder(eq(500L), any());
+    }
+
+    @Test
+    void automaticSettlementAdvancesDueSettlementAsSystemOperation() {
+        TradeOrderRecord order = order(TradeOrderStatus.COMPLETED_PENDING_SETTLEMENT);
+        SettlementRecord pendingSettlement = settlement(SettlementStatus.PENDING);
+        SettlementRecord settledSettlement = settlement(SettlementStatus.SETTLED);
+        when(orderRepository.listDueSettlementIds(any(), eq(20))).thenReturn(List.of(300L));
+        when(orderRepository.findSettlementByIdForUpdate(300L))
+                .thenReturn(Optional.of(pendingSettlement), Optional.of(settledSettlement), Optional.of(settledSettlement));
+        when(orderRepository.findOrderByIdForUpdate(500L)).thenReturn(Optional.of(order));
+        when(orderRepository.nextSettlementAttemptNo(300L)).thenReturn(1);
+        when(orderRepository.updateOrderStatus(eq(500L), eq(TradeOrderStatus.COMPLETED_PENDING_SETTLEMENT), eq(TradeOrderStatus.COMPLETED), any(), eq(false)))
+                .thenReturn(1);
+
+        List<SettlementResponse> responses = service.advanceDueSettlementsAutomatically();
+
+        assertThat(responses).hasSize(1);
+        assertThat(responses.get(0).status()).isEqualTo("SETTLED");
+        verify(orderRepository).createSucceededSettlementAttempt(eq(300L), eq(1), eq(new BigDecimal("399.00")), isNull(), any());
+        verify(auditLogRepository).recordOperation(
+                isNull(),
+                eq("SETTLEMENT_AUTO_ADVANCE"),
+                eq("SETTLEMENT"),
+                eq(300L),
+                eq(pendingSettlement),
+                eq(settledSettlement),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                eq("SUCCESS"),
+                eq("SYSTEM")
+        );
+    }
+
+    @Test
     void createReviewRequiresCompletedOrderAndSingleReviewPerParticipant() {
         when(orderRepository.findOrderByIdForUpdate(500L)).thenReturn(Optional.of(order(TradeOrderStatus.COMPLETED)));
         when(orderRepository.reviewExists(500L, 2L)).thenReturn(false);
@@ -194,6 +253,10 @@ class OrderServiceTest {
     }
 
     private TradeOrderRecord order(TradeOrderStatus status) {
+        return order(status, Instant.parse("2026-06-01T00:00:00Z"));
+    }
+
+    private TradeOrderRecord order(TradeOrderStatus status, Instant updatedAt) {
         return new TradeOrderRecord(
                 500L,
                 "ORD-1",
@@ -214,7 +277,7 @@ class OrderServiceTest {
                 null,
                 "今晚可面交",
                 Instant.parse("2026-06-01T00:00:00Z"),
-                Instant.parse("2026-06-01T00:00:00Z"),
+                updatedAt,
                 null
         );
     }
@@ -245,6 +308,23 @@ class OrderServiceTest {
                 null,
                 Instant.now().minusSeconds(60),
                 Instant.now().minusSeconds(60)
+        );
+    }
+
+    private SettlementRecord settlement(SettlementStatus status) {
+        return new SettlementRecord(
+                300L,
+                500L,
+                900L,
+                "SET-1",
+                new BigDecimal("399.00"),
+                status,
+                Instant.parse("2026-06-01T02:00:00Z"),
+                Instant.parse("2026-06-08T02:00:00Z"),
+                status == SettlementStatus.SETTLED ? Instant.parse("2026-06-08T02:00:00Z") : null,
+                null,
+                Instant.parse("2026-06-01T02:00:00Z"),
+                Instant.parse("2026-06-08T02:00:00Z")
         );
     }
 

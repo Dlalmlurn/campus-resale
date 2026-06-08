@@ -41,6 +41,8 @@ public class OrderService {
     private static final int MAX_REVIEW_CONTENT_LENGTH = 500;
     private static final long COMPLETION_WINDOW_SECONDS = 48 * 60 * 60;
     private static final long SETTLEMENT_FREEZE_SECONDS = 7 * 24 * 60 * 60;
+    private static final long PAYMENT_TIMEOUT_SECONDS = 15 * 60;
+    private static final int LIFECYCLE_BATCH_SIZE = 20;
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final Set<String> REFUND_TYPES = Set.of("FULL", "PARTIAL");
 
@@ -210,6 +212,10 @@ public class OrderService {
                     .orElseThrow(() -> ApiExceptions.conflict("订单支付状态不一致", Map.of("orderId", order.id())));
         }
         requireStatus(order, TradeOrderStatus.PENDING_PAYMENT, "订单当前不能支付");
+        if (isPaymentTimedOut(order, Instant.now())) {
+            cancelExpiredPendingPayment(order);
+            throw ApiExceptions.conflict("订单待付款已超过 15 分钟，已自动取消", Map.of("orderId", order.id()));
+        }
         Long occupiedOrderId = goodsRepository.currentOccupiedOrderId(order.goodsId());
         if (!Long.valueOf(order.id()).equals(occupiedOrderId)) {
             throw ApiExceptions.conflict("商品占用状态不一致，暂不能支付", Map.of("orderId", order.id()));
@@ -439,6 +445,42 @@ public class OrderService {
 
     @Transactional
     public SettlementResponse advanceSettlement(long settlementId, CurrentPrincipal admin) {
+        return advanceSettlement(settlementId, admin.id(), "SETTLEMENT_ADVANCE", "ADMIN");
+    }
+
+    @Transactional
+    public List<SettlementResponse> advanceDueSettlements(CurrentPrincipal admin) {
+        List<Long> dueIds = orderRepository.listDueSettlementIds(Instant.now(), LIFECYCLE_BATCH_SIZE);
+        return dueIds.stream()
+                .map(id -> advanceSettlement(id, admin.id(), "SETTLEMENT_ADVANCE_DUE", "ADMIN"))
+                .toList();
+    }
+
+    @Transactional
+    public List<SettlementResponse> advanceDueSettlementsAutomatically() {
+        List<Long> dueIds = orderRepository.listDueSettlementIds(Instant.now(), LIFECYCLE_BATCH_SIZE);
+        return dueIds.stream()
+                .map(id -> advanceSettlement(id, null, "SETTLEMENT_AUTO_ADVANCE", "SYSTEM"))
+                .toList();
+    }
+
+    @Transactional
+    public int cancelExpiredPendingPayments() {
+        Instant now = Instant.now();
+        Instant timeoutBoundary = now.minusSeconds(PAYMENT_TIMEOUT_SECONDS);
+        List<Long> orderIds = orderRepository.listExpiredPendingPaymentOrderIds(timeoutBoundary, LIFECYCLE_BATCH_SIZE);
+        int cancelled = 0;
+        for (Long orderId : orderIds) {
+            TradeOrderRecord order = lockedOrder(orderId);
+            if (order.status() == TradeOrderStatus.PENDING_PAYMENT && isPaymentTimedOut(order, now)) {
+                cancelExpiredPendingPayment(order);
+                cancelled++;
+            }
+        }
+        return cancelled;
+    }
+
+    private SettlementResponse advanceSettlement(long settlementId, Long operatorAdminId, String action, String operatorType) {
         SettlementRecord settlement = orderRepository.findSettlementByIdForUpdate(settlementId)
                 .orElseThrow(() -> ApiExceptions.notFound("结算记录不存在或不可见"));
         if (settlement.status() == SettlementStatus.SETTLED) {
@@ -459,7 +501,7 @@ public class OrderService {
                 settlement.id(),
                 attemptNo,
                 settlement.settlementAmount(),
-                admin.id(),
+                operatorAdminId,
                 now
         );
         orderRepository.markSettlementSettled(settlement.id(), now);
@@ -469,24 +511,29 @@ public class OrderService {
                     TradeOrderStatus.COMPLETED,
                     "SETTLEMENT_SETTLED",
                     null,
-                    admin.id(),
+                    operatorAdminId,
                     null,
                     false
             );
         }
         notificationService.notifySettlementStatusChanged(order.sellerId(), settlement.id(), SettlementStatus.SETTLED.name());
-        auditLogRepository.recordOperation(admin.id(), "SETTLEMENT_ADVANCE", "SETTLEMENT", settlement.id(), settlement, orderRepository.findSettlementByIdForUpdate(settlement.id()).orElse(null), null);
+        auditLogRepository.recordOperation(
+                operatorAdminId,
+                action,
+                "SETTLEMENT",
+                settlement.id(),
+                settlement,
+                orderRepository.findSettlementByIdForUpdate(settlement.id()).orElse(null),
+                null,
+                null,
+                null,
+                null,
+                "SUCCESS",
+                operatorType
+        );
         return orderRepository.findSettlementByIdForUpdate(settlement.id())
                 .map(SettlementResponse::from)
                 .orElseThrow(ApiExceptions::internalError);
-    }
-
-    @Transactional
-    public List<SettlementResponse> advanceDueSettlements(CurrentPrincipal admin) {
-        List<Long> dueIds = orderRepository.listDueSettlementIds(Instant.now(), 20);
-        return dueIds.stream()
-                .map(id -> advanceSettlement(id, admin))
-                .toList();
     }
 
     @Transactional
@@ -628,6 +675,25 @@ public class OrderService {
                 operatorAdminId,
                 reason
         );
+    }
+
+    private boolean isPaymentTimedOut(TradeOrderRecord order, Instant now) {
+        return order.updatedAt().plusSeconds(PAYMENT_TIMEOUT_SECONDS).isBefore(now)
+                || order.updatedAt().plusSeconds(PAYMENT_TIMEOUT_SECONDS).equals(now);
+    }
+
+    private void cancelExpiredPendingPayment(TradeOrderRecord order) {
+        transitionOrder(
+                order,
+                TradeOrderStatus.CANCELLED,
+                "PAYMENT_TIMEOUT_CANCELLED",
+                null,
+                null,
+                "待付款超过 15 分钟自动取消",
+                true
+        );
+        goodsRepository.releaseReservation(order.goodsId(), order.id());
+        orderRepository.closeActivePaymentsByOrder(order.id(), Instant.now());
     }
 
     private void requireParticipant(TradeOrderRecord order, CurrentPrincipal principal) {
