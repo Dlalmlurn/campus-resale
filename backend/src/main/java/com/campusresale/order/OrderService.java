@@ -577,7 +577,7 @@ public class OrderService {
                 .stream()
                 .peek(refund -> {
                     if (!refund.evidenceFileIds().isEmpty()) {
-                        auditLogRepository.recordSensitiveAccess(admin.id(), "REFUND_EVIDENCE", refund.id(), "查看退款证据列表", "SUCCESS", ipAddress);
+                        auditLogRepository.recordSensitiveAccess(admin.id(), "REFUND_EVIDENCE", refund.id(), "查看退款证据列表", "ALLOWED", ipAddress);
                     }
                 })
                 .map(RefundResponse::from)

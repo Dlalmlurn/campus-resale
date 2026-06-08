@@ -83,13 +83,8 @@ public class NotificationRepository {
     }
 
     public List<NotificationRecord> findByReceiver(long receiverUserId, boolean unreadOnly, int limit, int offset) {
-        String unreadClause = unreadOnly ? " AND read_at IS NULL" : "";
-        return jdbcTemplate.query(SELECT_COLUMNS + """
-                        WHERE receiver_user_id = ?
-                        """ + unreadClause + """
-                        ORDER BY created_at DESC, id DESC
-                        LIMIT ? OFFSET ?
-                        """,
+        return jdbcTemplate.query(
+                buildListSql(unreadOnly),
                 new NotificationRowMapper(),
                 receiverUserId,
                 limit,
@@ -98,15 +93,35 @@ public class NotificationRepository {
     }
 
     public long countByReceiver(long receiverUserId, boolean unreadOnly) {
-        String unreadClause = unreadOnly ? " AND read_at IS NULL" : "";
-        return jdbcTemplate.queryForObject("""
-                        SELECT COUNT(*)
-                        FROM notifications
-                        WHERE receiver_user_id = ?
-                        """ + unreadClause,
+        return jdbcTemplate.queryForObject(
+                buildCountSql(unreadOnly),
                 Long.class,
                 receiverUserId
         );
+    }
+
+    /**
+     * 拼接未读筛选列表 SQL。每段都自带前导空格，避免文本块相邻拼接漏空格导致 `IS NULLORDER BY` 这类非法语法。
+     */
+    static String buildListSql(boolean unreadOnly) {
+        return SELECT_COLUMNS
+                + " WHERE receiver_user_id = ?"
+                + unreadClause(unreadOnly)
+                + " ORDER BY created_at DESC, id DESC"
+                + " LIMIT ? OFFSET ?";
+    }
+
+    /**
+     * 拼接未读筛选计数 SQL，复用同一套未读条件，保证 count 与 list 口径一致。
+     */
+    static String buildCountSql(boolean unreadOnly) {
+        return "SELECT COUNT(*) FROM notifications"
+                + " WHERE receiver_user_id = ?"
+                + unreadClause(unreadOnly);
+    }
+
+    private static String unreadClause(boolean unreadOnly) {
+        return unreadOnly ? " AND read_at IS NULL" : "";
     }
 
     public long unreadCount(long receiverUserId) {

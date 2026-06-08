@@ -179,17 +179,17 @@ public class N3GovernanceService {
     }
 
     public List<ReportResponse> adminReports(CurrentPrincipal admin, String ipAddress) {
-        auditLogRepository.recordSensitiveAccess(admin.id(), "REPORT_QUEUE", 0, "查看举报队列", "SUCCESS", ipAddress);
+        auditLogRepository.recordSensitiveAccess(admin.id(), "REPORT_QUEUE", 0, "查看举报队列", "ALLOWED", ipAddress);
         return repository.listReportsForAdmin();
     }
 
     public List<AppealResponse> adminAppeals(CurrentPrincipal admin, String ipAddress) {
-        auditLogRepository.recordSensitiveAccess(admin.id(), "APPEAL_QUEUE", 0, "查看申诉队列", "SUCCESS", ipAddress);
+        auditLogRepository.recordSensitiveAccess(admin.id(), "APPEAL_QUEUE", 0, "查看申诉队列", "ALLOWED", ipAddress);
         return repository.listAppealsForAdmin();
     }
 
     public List<RefundResponse> adminRefunds(CurrentPrincipal admin, String ipAddress) {
-        auditLogRepository.recordSensitiveAccess(admin.id(), "REFUND_QUEUE", 0, "查看退款队列", "SUCCESS", ipAddress);
+        auditLogRepository.recordSensitiveAccess(admin.id(), "REFUND_QUEUE", 0, "查看退款队列", "ALLOWED", ipAddress);
         return repository.listRefundsForAdmin();
     }
 
@@ -211,7 +211,7 @@ public class N3GovernanceService {
         ReportResponse after = repository.updateReport(reportId, admin.id(), status, note, Instant.now())
                 .orElseThrow(() -> ApiExceptions.notFound("举报记录不存在"));
         auditLogRepository.recordOperation(admin.id(), "N3_REPORT_HANDLE", "REPORT", reportId, before, after, ipAddress);
-        auditLogRepository.recordSensitiveAccess(admin.id(), "REPORT_EVIDENCE", reportId, "处理举报证据", "SUCCESS", ipAddress);
+        auditLogRepository.recordSensitiveAccess(admin.id(), "REPORT_EVIDENCE", reportId, "处理举报证据", "ALLOWED", ipAddress);
         if ("UPHELD".equals(status)) {
             repository.applyUpheldReportEffects(reportId, before.targetType(), before.targetId(), request.penaltyUserId(), admin.id(), note);
         }
@@ -230,7 +230,7 @@ public class N3GovernanceService {
         AppealResponse after = repository.updateAppeal(appealId, admin.id(), status, note, Instant.now())
                 .orElseThrow(() -> ApiExceptions.notFound("申诉记录不存在"));
         auditLogRepository.recordOperation(admin.id(), "N3_APPEAL_REVIEW", "APPEAL", appealId, before, after, ipAddress);
-        auditLogRepository.recordSensitiveAccess(admin.id(), "APPEAL_EVIDENCE", appealId, "审核申诉证据", "SUCCESS", ipAddress);
+        auditLogRepository.recordSensitiveAccess(admin.id(), "APPEAL_EVIDENCE", appealId, "审核申诉证据", "ALLOWED", ipAddress);
         if ("APPROVED".equals(status)) {
             repository.liftActivePenaltiesForReport(before.reportId(), admin.id(), appealId, Instant.now());
             repository.insertCreditRecord(before.appellant().id(), "APPEAL", appealId, "申诉通过，信用影响已修正", 5, "申诉通过", admin.id());

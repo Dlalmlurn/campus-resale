@@ -91,6 +91,9 @@ public class AuditLogRepository {
         );
     }
 
+    /** sensitive_access_logs.result 的合法取值，与 ck_sensitive_access_logs_result 约束一致。 */
+    private static final java.util.Set<String> SENSITIVE_ACCESS_RESULTS = java.util.Set.of("ALLOWED", "DENIED", "FAILED");
+
     public void recordSensitiveAccess(
             long adminId,
             String targetType,
@@ -99,6 +102,11 @@ public class AuditLogRepository {
             String result,
             String ipAddress
     ) {
+        // 提前拦住非法 result（例如误传 "SUCCESS"），避免直到 INSERT 才被 DB 约束以 500 形式打断业务流程。
+        if (!SENSITIVE_ACCESS_RESULTS.contains(result)) {
+            throw new IllegalArgumentException(
+                    "sensitive access result 必须是 ALLOWED/DENIED/FAILED，实际为：" + result);
+        }
         jdbcTemplate.update("""
                         INSERT INTO sensitive_access_logs (
                             admin_id,
