@@ -1,0 +1,2 @@
+{"external_id": "demo-1", "title": "示例：考研英语真题集（仅供格式参考）", "description": "这是导入器认的 JSONL 格式示例，请用真实公开数据集替换，不要直接拿它当演示数据。", "price": 25.0, "condition": "LIKE_NEW", "category_code": ""}
+{"external_id": "demo-2", "title": "示例：二手机械键盘 87 键", "description": "字段说明见 README；price 单位与数据集一致，category_code 找不到时回退默认分类。", "price": 120.0, "condition": "LIGHTLY_USED", "category_code": "", "image_url": "https://picsum.photos/seed/demo-2/800/600"}
