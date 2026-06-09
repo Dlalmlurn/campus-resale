@@ -9,8 +9,12 @@ import static org.mockito.Mockito.when;
 
 import com.campusresale.governance.N3GovernanceRepository.OrderSnapshot;
 import com.campusresale.governance.N3Requests.CreateRefundRequest;
+import com.campusresale.governance.N3Requests.DecideRefundRequest;
 import com.campusresale.governance.N3Requests.HandleReportRequest;
+import com.campusresale.governance.N3Requests.ReviewAppealRequest;
 import com.campusresale.governance.N3Requests.SubmitReportRequest;
+import com.campusresale.governance.N3Responses.AppealResponse;
+import com.campusresale.governance.N3Responses.RefundResponse;
 import com.campusresale.governance.N3Responses.ReportResponse;
 import com.campusresale.governance.N3Responses.UserSummary;
 import com.campusresale.notification.NotificationService;
@@ -134,6 +138,39 @@ class N3GovernanceServiceTest {
                 .satisfies(exception -> assertThat(((ApiException) exception).code()).isEqualTo("NOT_FOUND"));
     }
 
+    @Test
+    void reviewAppealApprovesAndRepairsCreditEffects() {
+        CurrentPrincipal admin = principal(1L, Set.of("CONTENT_ADMIN"));
+        AppealResponse before = appeal("PENDING_REVIEW");
+        AppealResponse after = appeal("APPROVED");
+        when(repository.findAppeal(41L)).thenReturn(Optional.of(before));
+        when(repository.updateAppeal(eq(41L), eq(1L), eq("APPROVED"), eq("申诉材料有效，予以通过"), any(Instant.class)))
+                .thenReturn(Optional.of(after));
+
+        AppealResponse response = service.reviewAppeal(41L, new ReviewAppealRequest("APPROVED", "申诉材料有效，予以通过"), admin, "127.0.0.1");
+
+        assertThat(response.status()).isEqualTo("APPROVED");
+        verify(repository).liftActivePenaltiesForReport(eq(88L), eq(1L), eq(41L), any(Instant.class));
+        verify(repository).insertCreditRecord(11L, "APPEAL", 41L, "申诉通过，信用影响已修正", 5, "申诉通过", 1L);
+        verify(auditLogRepository).recordOperation(eq(1L), eq("N3_APPEAL_REVIEW"), eq("APPEAL"), eq(41L), eq(before), eq(after), eq("127.0.0.1"));
+    }
+
+    @Test
+    void decideRefundMarksRefundedAndWritesCreditRecord() {
+        CurrentPrincipal admin = principal(1L, Set.of("CONTENT_ADMIN"));
+        RefundResponse before = refund("PENDING");
+        RefundResponse after = refund("REFUNDED");
+        when(repository.findRefund(51L)).thenReturn(Optional.of(before));
+        when(repository.updateRefund(eq(51L), eq(1L), eq("REFUNDED"), eq("已完成模拟退款处理"), any(Instant.class)))
+                .thenReturn(Optional.of(after));
+
+        RefundResponse response = service.decideRefund(51L, new DecideRefundRequest("REFUNDED", "已完成模拟退款处理"), admin, "127.0.0.1");
+
+        assertThat(response.status()).isEqualTo("REFUNDED");
+        verify(repository).insertCreditRecord(31L, "REFUND", 51L, "退款工单处理结果：REFUNDED", 2, "退款已处理", 1L);
+        verify(auditLogRepository).recordOperation(eq(1L), eq("N3_REFUND_DECIDE"), eq("REFUND"), eq(51L), eq(before), eq(after), eq("127.0.0.1"));
+    }
+
     private ReportResponse report(String status) {
         return new ReportResponse(
                 88L,
@@ -149,6 +186,39 @@ class N3GovernanceServiceTest {
                 null,
                 List.of(),
                 Instant.parse("2026-06-05T10:00:00Z")
+        );
+    }
+
+    private AppealResponse appeal(String status) {
+        return new AppealResponse(
+                41L,
+                88L,
+                new UserSummary(11L, "小林同学"),
+                "商品成色说明已补充，申请复核。",
+                status,
+                null,
+                null,
+                null,
+                List.of(),
+                Instant.parse("2026-06-05T12:00:00Z")
+        );
+    }
+
+    private RefundResponse refund(String status) {
+        return new RefundResponse(
+                51L,
+                "R202606050001",
+                77L,
+                501L,
+                new UserSummary(31L, "买家同学"),
+                "29.00",
+                "PARTIAL",
+                "商品配件缺失，申请部分退款。",
+                status,
+                null,
+                null,
+                null,
+                Instant.parse("2026-06-05T12:10:00Z")
         );
     }
 

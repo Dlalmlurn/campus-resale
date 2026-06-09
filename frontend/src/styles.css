@@ -1,3 +1,4 @@
+/* 文件功能：定义前端应用的全局布局、页面组件、表单、后台和个人中心样式。 */
 :root {
   color: #17212b;
   background: #f5f7f5;
@@ -115,7 +116,7 @@ main > section { animation: fadeInUp 180ms ease both; }
 .auth-layout { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 42px; align-items: center; min-height: 620px; }
 .auth-intro { max-width: 520px; }
 .auth-intro h1 { font-size: 3rem; }
-.auth-intro p:last-child { color: var(--muted); line-height: 1.7; }
+.auth-disclaimer { display: inline-flex; max-width: 520px; padding: 12px 14px; border: 1px solid #e7c35e; border-radius: 8px; color: #7a4d05; background: #fff7df; line-height: 1.55; }
 .form-panel, .side-panel { border: 1px solid var(--line); border-radius: 8px; background: #fff; }
 .form-panel { display: grid; gap: 14px; padding: 20px; }
 .side-panel { padding: 18px; }
@@ -159,11 +160,12 @@ main > section { animation: fadeInUp 180ms ease both; }
 .recommendation-reason { color: #2f6b54; font-size: 0.82rem; font-weight: 800; }
 
 .admin-tabs { width: min(430px, 100%); margin-bottom: 14px; }
-.admin-tabs--wide { width: min(820px, 100%); grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.admin-tabs--wide { width: min(920px, 100%); grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); }
 .admin-tabs button, .order-tabs button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
-.admin-demo-guide { display: grid; grid-template-columns: minmax(180px, 1fr) repeat(6, auto); gap: 10px; align-items: center; margin-bottom: 16px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.admin-demo-guide { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; align-items: end; margin-bottom: 16px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
 .admin-demo-guide h2 { margin: 0; font-size: 1rem; }
 .admin-demo-guide .eyebrow { margin-bottom: 2px; }
+.admin-demo-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 10px; align-items: center; }
 .dashboard-page { display: grid; gap: 14px; }
 .dashboard-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0 4px; }
 .dashboard-header h2 { margin: 0; font-size: 1.25rem; }
@@ -353,7 +355,8 @@ main > section { animation: fadeInUp 180ms ease both; }
 .profile-stat { display: grid; place-items: center; align-content: center; gap: 5px; min-height: 114px; background: #fbfdfc; }
 .profile-stat span { color: var(--muted); font-size: 0.76rem; font-weight: 800; }
 .profile-stat strong { color: var(--green-dark); font-size: 1.35rem; }
-.account-security { margin-bottom: 18px; }
+.account-security, .account-delete { margin-bottom: 18px; }
+.account-delete { border-color: #edc1bb; background: #fffaf9; }
 .profile-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
 .profile-column { min-width: 0; padding: 14px; }
 .profile-column h2 { margin-bottom: 10px; font-size: 1rem; }
@@ -367,7 +370,7 @@ main > section { animation: fadeInUp 180ms ease both; }
   .main-nav { grid-column: 1 / -1; grid-row: 2; overflow-x: auto; padding-bottom: 8px; }
   .goods-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .detail-grid, .auth-layout, .two-column-layout, .seller-layout, .order-detail-grid, .conversation-detail-grid, .profile-overview { grid-template-columns: 1fr; }
-  .admin-demo-guide, .log-filter-bar, .stat-grid, .profile-grid { grid-template-columns: 1fr 1fr; }
+  .admin-demo-actions, .log-filter-bar, .stat-grid, .profile-grid { grid-template-columns: 1fr 1fr; }
   .order-timeline { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .auth-layout { min-height: 0; padding-top: 44px; }
   .auth-intro h1 { font-size: 2.4rem; }
@@ -385,7 +388,7 @@ main > section { animation: fadeInUp 180ms ease both; }
   .market-stat { display: none; }
   .search-toolbar, .market-filter-row { grid-template-columns: 1fr; }
   .goods-grid, .form-grid { grid-template-columns: 1fr; }
-  .admin-demo-guide, .admin-tabs--wide, .log-filter-bar, .stat-grid, .status-bar-row, .notification-row, .profile-stats, .profile-grid { grid-template-columns: 1fr; }
+  .admin-demo-actions, .admin-tabs--wide, .log-filter-bar, .stat-grid, .status-bar-row, .notification-row, .profile-stats, .profile-grid { grid-template-columns: 1fr; }
   .goods-image { height: 174px; }
   .goods-image.large { min-height: 280px; }
   .review-row { grid-template-columns: 1fr auto; }

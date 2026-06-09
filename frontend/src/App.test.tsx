@@ -1,3 +1,4 @@
+// 文件功能：覆盖前端主流程路由、权限守卫、商品筛选、后台入口和账号安全交互。
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
@@ -39,12 +40,22 @@ const contentAdmin: CurrentUser = {
   canTrade: true
 };
 
+const superAdmin: CurrentUser = {
+  id: 2,
+  username: "super_admin",
+  nickname: "超级管理员",
+  roles: ["REGISTERED_USER", "VERIFIED_STUDENT", "SUPER_ADMIN"],
+  verificationStatus: "APPROVED",
+  canTrade: true
+};
+
 describe("App", () => {
   beforeEach(() => {
     window.location.hash = "#/market";
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -80,11 +91,27 @@ describe("App", () => {
     });
   });
 
+  it("keeps price descending sorting wired to the goods search API", async () => {
+    const fetchMock = stubBackend();
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByText("数据库原理教材")).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText("排序"), { target: { value: "PRICE_DESC" } });
+    fireEvent.click(screen.getByRole("button", { name: "搜索" }));
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/api/goods?sort=PRICE_DESC"))).toBe(true);
+    });
+  });
+
   it("guards seller publishing behind login", async () => {
     stubBackend();
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: "发布" }));
     await waitFor(() => expect(screen.getByText("登录账号")).toBeInTheDocument());
+    expect(screen.getByText("本平台是学习测试平台，不存在任何付费或者盈利功能")).toBeInTheDocument();
+    expect(screen.queryByText("登录后可以提交校园认证、发布商品并查看审核进度。")).not.toBeInTheDocument();
     expect(screen.getByText("请先登录后继续")).toBeInTheDocument();
   });
 
@@ -179,6 +206,8 @@ describe("App", () => {
     render(<App />);
 
     await waitFor(() => expect(screen.getByText("后台验收闭环")).toBeInTheDocument());
+    expect(screen.getByText("后台验收")).toBeInTheDocument();
+    expect(screen.queryByText("N2 后台验收")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "后台" })).toBeInTheDocument();
     expect(screen.getByText("演示导航")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "查看审计日志" })).toBeInTheDocument();
@@ -186,6 +215,36 @@ describe("App", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "查看审计日志" }));
     await waitFor(() => expect(screen.getByText("操作日志")).toBeInTheDocument());
+  });
+
+  it("lets a normal user self-delete the account and clears the session state", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fetchMock = stubBackend(verifiedBuyer);
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByText("买家同学")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "我的" }));
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: "注销账号" })).toBeInTheDocument());
+    fireEvent.change(screen.getAllByLabelText("当前密码")[1], { target: { value: "520zikejiang" } });
+    fireEvent.click(screen.getByRole("button", { name: "注销账号" }));
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([input]) => String(input) === "/api/auth/me/delete")).toBe(true);
+    });
+    expect(confirmSpy).toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByText("账号已注销")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "登录" })).toBeInTheDocument();
+  });
+
+  it("disables self deletion for super admins", async () => {
+    stubBackend(superAdmin);
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByText("超级管理员")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "我的" }));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "超管不可自助注销" })).toBeDisabled());
   });
 
   it("loads notifications and can mark all as read", async () => {
@@ -216,6 +275,30 @@ describe("App", () => {
     expect(screen.getByText("信用画像")).toBeInTheDocument();
     expect(screen.getByText("治理队列")).toBeInTheDocument();
     expect(screen.getByText("商品描述与实际成色不一致，需要管理员核实。")).toBeInTheDocument();
+  });
+
+  it("handles admin governance report, appeal and refund actions", async () => {
+    const fetchMock = stubBackend(contentAdmin);
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByText("内容管理员")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "治理" }));
+
+    await waitFor(() => expect(screen.getByText("管理员待办")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "成立" }));
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([input]) => String(input) === "/api/admin/n3/reports/39/handle")).toBe(true);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "通过" }));
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([input]) => String(input) === "/api/admin/n3/appeals/41/review")).toBe(true);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "退款" }));
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([input]) => String(input) === "/api/admin/n3/refunds/51/decide")).toBe(true);
+    });
   });
 
   it("shows AI publishing assistance and discovery reasons", async () => {
@@ -274,6 +357,8 @@ function stubBackend(currentUser?: CurrentUser) {
         ? response(currentUser)
         : response({ code: "AUTH_REQUIRED", message: "请先登录", details: {} }, 401);
     }
+    if (url === "/api/auth/logout") return response({ success: true });
+    if (url === "/api/auth/me/delete") return response({ deleted: true });
     if (url === "/api/categories") return response([{ id: 1, code: "BOOKS", name: "教材资料", parentId: null }]);
     if (url === "/api/tags") return response([{ id: 1, name: "可议价", description: "接受合理议价" }]);
     if (url === "/api/campus-places") return response([{ id: 1, campus: "主校区", name: "图书馆正门", detail: "入口处" }]);
@@ -391,6 +476,48 @@ function stubBackend(currentUser?: CurrentUser) {
       assistSource: "RULES",
       requestId: 501
     });
+    if (url === "/api/admin/n3/reports/39/handle") return response({
+      id: 39,
+      reporter: { id: 31, nickname: "买家同学" },
+      targetType: "GOODS",
+      targetId: 10,
+      reasonType: "FAKE_GOODS",
+      description: "商品描述与实际成色不一致，需要管理员核实。",
+      status: "UPHELD",
+      priority: "NORMAL",
+      handledByAdminId: 1,
+      handledAt: "2026-06-05T12:40:00Z",
+      handlingNote: "管理员核实举报成立",
+      evidenceFileIds: [],
+      createdAt: "2026-06-05T11:20:00Z"
+    });
+    if (url === "/api/admin/n3/appeals/41/review") return response({
+      id: 41,
+      reportId: 39,
+      appellant: { id: 11, nickname: "小林同学" },
+      description: "商品成色说明已补充，申请复核。",
+      status: "APPROVED",
+      reviewedByAdminId: 1,
+      reviewedAt: "2026-06-05T12:45:00Z",
+      reviewNote: "申诉材料有效，予以通过",
+      evidenceFileIds: [],
+      createdAt: "2026-06-05T12:00:00Z"
+    });
+    if (url === "/api/admin/n3/refunds/51/decide") return response({
+      id: 51,
+      refundNo: "R202606050001",
+      orderId: 77,
+      paymentOrderId: 501,
+      requester: { id: 31, nickname: "买家同学" },
+      amount: "29.00",
+      refundType: "PARTIAL",
+      reason: "商品配件缺失，申请部分退款。",
+      status: "REFUNDED",
+      decisionByAdminId: 1,
+      decisionNote: "已完成模拟退款处理",
+      processedAt: "2026-06-05T12:50:00Z",
+      createdAt: "2026-06-05T12:10:00Z"
+    });
     if (url === "/api/n3/governance-overview") {
       return response({
         reports: [{
@@ -452,7 +579,21 @@ function stubBackend(currentUser?: CurrentUser) {
             evidenceFileIds: [],
             createdAt: "2026-06-05T12:00:00Z"
           }],
-          pendingRefunds: [],
+          pendingRefunds: [{
+            id: 51,
+            refundNo: "R202606050001",
+            orderId: 77,
+            paymentOrderId: 501,
+            requester: { id: 31, nickname: "买家同学" },
+            amount: "29.00",
+            refundType: "PARTIAL",
+            reason: "商品配件缺失，申请部分退款。",
+            status: "PENDING",
+            decisionByAdminId: null,
+            decisionNote: null,
+            processedAt: null,
+            createdAt: "2026-06-05T12:10:00Z"
+          }],
           activePenalties: [{
             id: 5,
             user: { id: 11, nickname: "小林同学" },

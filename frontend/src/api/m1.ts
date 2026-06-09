@@ -34,6 +34,13 @@ export function logout() {
   return apiRequest<{ success: boolean }>("/api/auth/logout", { method: "POST" });
 }
 
+export function deleteOwnAccount(password: string) {
+  return apiRequest<{ deleted: boolean }>("/api/auth/me/delete", {
+    method: "POST",
+    body: JSON.stringify({ password })
+  });
+}
+
 // 商品发布与筛选依赖分类、标签和校区地点，页面启动时一次性并发加载。
 export async function getCatalog() {
   const [categories, tags, places] = await Promise.all([

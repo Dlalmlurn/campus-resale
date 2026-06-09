@@ -1,13 +1,13 @@
-// 文件功能："我的"个人中心，集中展示头像资料、账号安全、收藏关注、最近浏览和已发布商品。
-import { KeyRound, RefreshCw, UserMinus } from "lucide-react";
+// 文件功能："我的"个人中心，集中展示头像资料、账号安全、收藏关注、最近浏览、已发布商品和账号注销。
+import { KeyRound, RefreshCw, ShieldAlert, UserMinus } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { getGovernanceOverview, unfollowUser } from "../api/governance";
-import { changePassword, getMyGoods, uploadAvatar } from "../api/m1";
+import { changePassword, deleteOwnAccount, getMyGoods, uploadAvatar } from "../api/m1";
 import type { CurrentUser, GoodsSummary } from "../api/types";
 import { Avatar, LoadingBlock, MetricTile, ProfileColumn } from "../components/ui";
-import { goodsStatusLabels, loadViewedGoods, messageOf, verificationStatusLabels, type Notify, type Route, type ViewedGoods } from "../shared/app-shared";
+import { goodsStatusLabels, isSuperAdmin, loadViewedGoods, messageOf, verificationStatusLabels, type Notify, type Route, type ViewedGoods } from "../shared/app-shared";
 
-export function ProfilePage(props: { currentUser: CurrentUser; onUserChange: (user: CurrentUser) => void; notify: Notify; navigate: (route: Route) => void }) {
+export function ProfilePage(props: { currentUser: CurrentUser; onUserChange: (user: CurrentUser) => void; onAccountDeleted: () => void; notify: Notify; navigate: (route: Route) => void }) {
   const [favorites, setFavorites] = useState<Awaited<ReturnType<typeof getGovernanceOverview>>["favorites"]>([]);
   const [follows, setFollows] = useState<Awaited<ReturnType<typeof getGovernanceOverview>>["follows"]>([]);
   const [viewedGoods, setViewedGoods] = useState<ViewedGoods[]>([]);
@@ -16,6 +16,8 @@ export function ProfilePage(props: { currentUser: CurrentUser; onUserChange: (us
   const [busy, setBusy] = useState(false);
   const [pwForm, setPwForm] = useState({ current: "", next: "", confirm: "" });
   const [pwBusy, setPwBusy] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   // 个人中心首屏只加载与本页卡片相关的数据，订单信息统一交给订单页展示。
   const load = useCallback(async () => {
@@ -71,6 +73,28 @@ export function ProfilePage(props: { currentUser: CurrentUser; onUserChange: (us
     }
   };
 
+  const submitAccountDeletion = async (event: FormEvent) => {
+    event.preventDefault();
+    if (isSuperAdmin(props.currentUser)) {
+      props.notify("error", "超级管理员账号不能自助注销，请先移交权限");
+      return;
+    }
+    if (!window.confirm("确认注销当前账号？账号会被停用，交易、审计等事实记录会继续保留。")) {
+      return;
+    }
+    setDeleteBusy(true);
+    try {
+      await deleteOwnAccount(deletePassword);
+      setDeletePassword("");
+      props.notify("success", "账号已注销");
+      props.onAccountDeleted();
+    } catch (error) {
+      props.notify("error", messageOf(error));
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
   const unfollow = async (userId: number, nickname: string) => {
     setBusy(true);
     try {
@@ -122,6 +146,24 @@ export function ProfilePage(props: { currentUser: CurrentUser; onUserChange: (us
         </div>
         <p className="form-hint">修改成功后会退出其它设备的登录，当前设备保持登录。</p>
         <button className="secondary-button" disabled={pwBusy} type="submit">{pwBusy ? "提交中…" : "更新密码"}</button>
+      </form>
+      <form className="form-panel account-delete" onSubmit={(event) => void submitAccountDeletion(event)}>
+        <div className="panel-title"><h2><ShieldAlert size={17} /> 注销账号</h2></div>
+        <p className="form-hint">注销后账号会被停用并退出所有设备；交易、支付、举报和审计事实记录继续保留。超级管理员需先移交权限。</p>
+        <label className="form-field">
+          <span>当前密码</span>
+          <input
+            required
+            disabled={isSuperAdmin(props.currentUser)}
+            type="password"
+            autoComplete="current-password"
+            value={deletePassword}
+            onChange={(event) => setDeletePassword(event.target.value)}
+          />
+        </label>
+        <button className="secondary-button danger-action" disabled={deleteBusy || isSuperAdmin(props.currentUser)} type="submit">
+          {deleteBusy ? "注销中…" : isSuperAdmin(props.currentUser) ? "超管不可自助注销" : "注销账号"}
+        </button>
       </form>
       {loading ? <LoadingBlock /> : (
         <div className="profile-grid">

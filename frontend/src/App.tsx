@@ -154,12 +154,25 @@ export function App() {
   const handleLogout = async () => {
     try {
       await logout();
+      const marketRoute: Route = { name: "market" };
+      setRoute(marketRoute);
+      if (window.location.hash !== routeHash(marketRoute)) {
+        window.location.hash = routeHash(marketRoute);
+      }
       setCurrentUser(null);
       notify("success", "已退出登录");
-      navigate({ name: "market" });
     } catch (error) {
       notify("error", messageOf(error));
     }
+  };
+
+  const handleAccountDeleted = () => {
+    const marketRoute: Route = { name: "market" };
+    setRoute(marketRoute);
+    if (window.location.hash !== routeHash(marketRoute)) {
+      window.location.hash = routeHash(marketRoute);
+    }
+    setCurrentUser(null);
   };
 
   const handleDemoLogin = async (username: string) => {
@@ -259,7 +272,7 @@ export function App() {
         {route.name === "conversation" && currentUser && <ConversationDetailPage id={route.id} currentUser={currentUser} places={catalog.places} notify={notify} onBack={() => navigate({ name: "conversations" })} onOpenOrder={(id) => navigate({ name: "order", id })} />}
         {route.name === "orders" && currentUser && <OrdersPage currentUser={currentUser} notify={notify} onOpenOrder={(id) => navigate({ name: "order", id })} />}
         {route.name === "order" && currentUser && <OrderDetailPage id={route.id} currentUser={currentUser} notify={notify} onBack={() => navigate({ name: "orders" })} />}
-        {route.name === "profile" && currentUser && <ProfilePage currentUser={currentUser} onUserChange={setCurrentUser} notify={notify} navigate={navigate} />}
+        {route.name === "profile" && currentUser && <ProfilePage currentUser={currentUser} onUserChange={setCurrentUser} onAccountDeleted={handleAccountDeleted} notify={notify} navigate={navigate} />}
         {route.name === "notifications" && currentUser && <NotificationsPage notify={notify} onOpenOrder={(id) => navigate({ name: "order", id })} />}
         {route.name === "auth" && <AuthPage currentUser={currentUser} onAuthenticated={setCurrentUser} navigate={navigate} notify={notify} />}
         {route.name === "verification" && currentUser && <VerificationPage currentUser={currentUser} onUserChange={setCurrentUser} notify={notify} />}

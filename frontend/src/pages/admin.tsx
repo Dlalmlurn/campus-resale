@@ -55,19 +55,21 @@ export function AdminPage(props: { notify: Notify; navigate: (route: Route) => v
 
   return (
     <section>
-      <PageHeading eyebrow="N2 后台验收" title="后台验收闭环" text="汇总统计看板、审核队列、审计日志和通知入口，演示关键状态变化可追溯。" />
+      <PageHeading eyebrow="后台验收" title="后台验收闭环" text="汇总统计看板、审核队列、审计日志和通知入口，演示关键状态变化可追溯。" />
       <div className="admin-demo-guide">
         <div>
           <p className="eyebrow">Demo flow</p>
           <h2>演示导航</h2>
         </div>
-        <button className="secondary-button compact" type="button" onClick={() => setTab("dashboard")}>查看统计看板</button>
-        <button className="secondary-button compact" type="button" onClick={() => setTab("verification")}>认证审核</button>
-        <button className="secondary-button compact" type="button" onClick={() => setTab("goods")}>商品审核</button>
-        <button className="secondary-button compact" type="button" onClick={() => setTab("audit")}>查看审计日志</button>
-        <button className="secondary-button compact" type="button" onClick={() => setTab("funds")}>资金管理</button>
-        {props.isSuperAdmin && <button className="secondary-button compact" type="button" onClick={() => setTab("users")}>账号管理</button>}
-        <button className="primary-button compact" type="button" onClick={() => props.navigate({ name: "notifications" })}>通知列表</button>
+        <div className="admin-demo-actions">
+          <button className="secondary-button compact" type="button" onClick={() => setTab("dashboard")}>查看统计看板</button>
+          <button className="secondary-button compact" type="button" onClick={() => setTab("verification")}>认证审核</button>
+          <button className="secondary-button compact" type="button" onClick={() => setTab("goods")}>商品审核</button>
+          <button className="secondary-button compact" type="button" onClick={() => setTab("audit")}>查看审计日志</button>
+          <button className="secondary-button compact" type="button" onClick={() => setTab("funds")}>资金管理</button>
+          {props.isSuperAdmin && <button className="secondary-button compact" type="button" onClick={() => setTab("users")}>账号管理</button>}
+          <button className="primary-button compact" type="button" onClick={() => props.navigate({ name: "notifications" })}>通知列表</button>
+        </div>
       </div>
       {/* 顶部 Tab 导航 */}
       <div className="segmented-control admin-tabs admin-tabs--wide">

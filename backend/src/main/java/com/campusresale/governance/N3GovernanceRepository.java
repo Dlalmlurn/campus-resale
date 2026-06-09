@@ -456,27 +456,31 @@ public class N3GovernanceRepository {
     }
 
     private void insertReportStateRecords(long reportId, String targetType, long targetId, long adminId, String note) {
-        String orderFilter = "ORDER".equals(targetType) ? "o.id = ?" : "o.goods_id = ?";
-        jdbcTemplate.update("""
-                        INSERT INTO order_state_records (order_id, from_status, to_status, event_type, operator_admin_id, reason, metadata_json)
-                        SELECT o.id,
-                               NULL,
-                               'DISPUTE_PROCESSING',
-                               'REPORT_UPHELD',
-                               ?,
-                               ?,
-                               jsonb_build_object('reportId', ?, 'targetType', ?)
-                        FROM trade_orders o
-                        WHERE """ + orderFilter + """
-                          AND o.status = 'DISPUTE_PROCESSING'
-                        ON CONFLICT DO NOTHING
-                        """,
+        jdbcTemplate.update(reportStateRecordSql(targetType),
                 adminId,
                 note,
                 reportId,
                 targetType,
                 targetId
         );
+    }
+
+    static String reportStateRecordSql(String targetType) {
+        String orderFilter = "ORDER".equals(targetType) ? "o.id = ?" : "o.goods_id = ?";
+        return """
+                INSERT INTO order_state_records (order_id, from_status, to_status, event_type, operator_admin_id, reason, metadata_json)
+                SELECT o.id,
+                       NULL,
+                       'DISPUTE_PROCESSING',
+                       'REPORT_UPHELD',
+                       ?,
+                       ?,
+                       jsonb_build_object('reportId', ?, 'targetType', ?)
+                FROM trade_orders o
+                WHERE %s
+                  AND o.status = 'DISPUTE_PROCESSING'
+                ON CONFLICT DO NOTHING
+                """.formatted(orderFilter);
     }
 
     public void upsertFavorite(long userId, long goodsId) {

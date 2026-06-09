@@ -44,7 +44,7 @@ export function AuthPage(props: { currentUser: CurrentUser | null; onAuthenticat
       <div className="auth-intro">
         <p className="eyebrow">校内可信交易</p>
         <h1>{mode === "login" ? "登录账号" : "注册账号"}</h1>
-        <p>登录后可以提交校园认证、发布商品并查看审核进度。</p>
+        <strong className="auth-disclaimer">本平台是学习测试平台，不存在任何付费或者盈利功能</strong>
       </div>
       <form className="form-panel" onSubmit={(event) => void submit(event)}>
         <div className="segmented-control">
