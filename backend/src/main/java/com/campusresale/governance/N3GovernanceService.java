@@ -11,6 +11,8 @@ import com.campusresale.governance.N3Requests.ReviewAppealRequest;
 import com.campusresale.governance.N3Requests.SubmitAppealRequest;
 import com.campusresale.governance.N3Requests.SubmitReportRequest;
 import com.campusresale.governance.N3Responses.AdminQueueResponse;
+import com.campusresale.governance.N3Responses.AdminCreditTraceResponse;
+import com.campusresale.governance.N3Responses.AdminReportUserTraceResponse;
 import com.campusresale.governance.N3Responses.AppealResponse;
 import com.campusresale.governance.N3Responses.CreditSummaryResponse;
 import com.campusresale.governance.N3Responses.FavoriteResponse;
@@ -36,7 +38,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class N3GovernanceService {
 
-    private static final Set<String> REPORT_TARGETS = Set.of("GOODS", "ORDER", "USER");
+    private static final Set<String> REPORT_TARGETS = Set.of("GOODS", "ORDER", "USER", "MESSAGE", "COMMENT");
     private static final Set<String> REPORT_STATUSES = Set.of("UPHELD", "REJECTED", "CLOSED");
     private static final Set<String> OPEN_REPORT_STATUSES = Set.of("PENDING", "PROCESSING");
     private static final Set<String> APPEAL_STATUSES = Set.of("APPROVED", "REJECTED", "CLOSED");
@@ -193,6 +195,21 @@ public class N3GovernanceService {
         return repository.listRefundsForAdmin();
     }
 
+    public List<AdminReportUserTraceResponse> adminReportTraceByUser(long userId, CurrentPrincipal admin, String ipAddress) {
+        auditLogRepository.recordSensitiveAccess(admin.id(), "GOVERNANCE_USER_TRACE", userId, "查看用户治理追踪", "ALLOWED", ipAddress);
+        return repository.listReportUserTraceByUser(userId);
+    }
+
+    public List<AdminCreditTraceResponse> adminCreditTraceByUser(long userId, CurrentPrincipal admin, String ipAddress) {
+        auditLogRepository.recordSensitiveAccess(admin.id(), "CREDIT_USER_TRACE", userId, "查看用户信用追踪", "ALLOWED", ipAddress);
+        return repository.listCreditTraceByUser(userId);
+    }
+
+    public List<AdminReportUserTraceResponse> adminReportTraceByReport(long reportId, CurrentPrincipal admin, String ipAddress) {
+        auditLogRepository.recordSensitiveAccess(admin.id(), "REPORT_TRACE", reportId, "查看举报关联用户追踪", "ALLOWED", ipAddress);
+        return repository.listReportUserTraceByReport(reportId);
+    }
+
     @Transactional
     public ReportResponse handleReport(long reportId, HandleReportRequest request, CurrentPrincipal admin, String ipAddress) {
         ReportResponse before = repository.findReport(reportId).orElseThrow(() -> ApiExceptions.notFound("举报记录不存在"));
@@ -278,7 +295,8 @@ public class N3GovernanceService {
         long penaltyId = repository.createPenalty(userId, reportId, appealId, penaltyType, reason, admin.id());
         PenaltyResponse penalty = repository.findPenalty(penaltyId).orElseThrow(() -> ApiExceptions.notFound("处罚记录不存在"));
         auditLogRepository.recordOperation(admin.id(), "N3_PENALTY_APPLY", "PENALTY", penaltyId, null, penalty, ipAddress);
-        repository.insertCreditRecord(userId, "REPORT", reportId, reason, penaltyDelta(penaltyType), "平台治理记录", admin.id());
+        // 处罚是实际影响信用的动作，source_id 指向 penalty_records，便于后台反查。
+        repository.insertCreditRecord(userId, "PENALTY", penaltyId, reason, penaltyDelta(penaltyType), "平台治理记录", admin.id());
         notificationService.create(userId, NotificationType.PENALTY_APPLIED, "平台治理处理", "你的账号产生一条治理处理记录：" + penaltyType + "。", "PENALTY", penaltyId, null);
         return penalty;
     }

@@ -103,8 +103,24 @@ class N3GovernanceServiceTest {
         service.handleReport(88L, new HandleReportRequest("UPHELD", "举报成立，下架商品并限制卖家交易", 11L, "TRADE_RESTRICT"), admin, "127.0.0.1");
 
         verify(repository).applyUpheldReportEffects(88L, "GOODS", 10L, 11L, 1L, "举报成立，下架商品并限制卖家交易");
-        verify(repository).insertCreditRecord(11L, "REPORT", 88L, "举报成立，下架商品并限制卖家交易", -20, "平台治理记录", 1L);
+        verify(repository).insertCreditRecord(11L, "PENALTY", 6L, "举报成立，下架商品并限制卖家交易", -20, "平台治理记录", 1L);
         verify(auditLogRepository).recordOperation(eq(1L), eq("N3_REPORT_HANDLE"), eq("REPORT"), eq(88L), eq(before), eq(after), eq("127.0.0.1"));
+    }
+
+    @Test
+    void adminTraceQueriesWriteSensitiveAccessLogs() {
+        CurrentPrincipal admin = principal(1L, Set.of("CONTENT_ADMIN"));
+        when(repository.listReportUserTraceByUser(11L)).thenReturn(List.of());
+        when(repository.listCreditTraceByUser(11L)).thenReturn(List.of());
+        when(repository.listReportUserTraceByReport(88L)).thenReturn(List.of());
+
+        assertThat(service.adminReportTraceByUser(11L, admin, "127.0.0.1")).isEmpty();
+        assertThat(service.adminCreditTraceByUser(11L, admin, "127.0.0.1")).isEmpty();
+        assertThat(service.adminReportTraceByReport(88L, admin, "127.0.0.1")).isEmpty();
+
+        verify(auditLogRepository).recordSensitiveAccess(1L, "GOVERNANCE_USER_TRACE", 11L, "查看用户治理追踪", "ALLOWED", "127.0.0.1");
+        verify(auditLogRepository).recordSensitiveAccess(1L, "CREDIT_USER_TRACE", 11L, "查看用户信用追踪", "ALLOWED", "127.0.0.1");
+        verify(auditLogRepository).recordSensitiveAccess(1L, "REPORT_TRACE", 88L, "查看举报关联用户追踪", "ALLOWED", "127.0.0.1");
     }
 
     @Test

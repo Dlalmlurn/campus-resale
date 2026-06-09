@@ -5,7 +5,9 @@ import com.campusresale.governance.N3Requests.DecideRefundRequest;
 import com.campusresale.governance.N3Requests.HandleReportRequest;
 import com.campusresale.governance.N3Requests.LiftPenaltyRequest;
 import com.campusresale.governance.N3Requests.ReviewAppealRequest;
+import com.campusresale.governance.N3Responses.AdminCreditTraceResponse;
 import com.campusresale.governance.N3Responses.AdminQueueResponse;
+import com.campusresale.governance.N3Responses.AdminReportUserTraceResponse;
 import com.campusresale.governance.N3Responses.AppealResponse;
 import com.campusresale.governance.N3Responses.PenaltyResponse;
 import com.campusresale.governance.N3Responses.RefundResponse;
@@ -70,6 +72,30 @@ public class AdminN3GovernanceController {
     @GetMapping("/refunds")
     public List<RefundResponse> refunds(HttpServletRequest request) {
         return service.adminRefunds(principal(request), ip(request));
+    }
+
+    @GetMapping("/users/{userId}/governance-trace")
+    public List<AdminReportUserTraceResponse> userGovernanceTrace(
+            @PathVariable long userId,
+            HttpServletRequest request
+    ) {
+        return service.adminReportTraceByUser(userId, principal(request), ip(request));
+    }
+
+    @GetMapping("/users/{userId}/credit-trace")
+    public List<AdminCreditTraceResponse> userCreditTrace(
+            @PathVariable long userId,
+            HttpServletRequest request
+    ) {
+        return service.adminCreditTraceByUser(userId, principal(request), ip(request));
+    }
+
+    @GetMapping("/reports/{id}/trace")
+    public List<AdminReportUserTraceResponse> reportTrace(
+            @PathVariable long id,
+            HttpServletRequest request
+    ) {
+        return service.adminReportTraceByReport(id, principal(request), ip(request));
     }
 
     @PostMapping("/refunds/{id}/decide")

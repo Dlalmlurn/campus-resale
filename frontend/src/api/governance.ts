@@ -1,3 +1,4 @@
+// 文件功能：治理、申诉、退款、收藏关注和管理员治理追踪 API。
 import { apiRequest } from "./client";
 
 export interface GovernanceUser {
@@ -100,6 +101,46 @@ export interface CreditSummary {
   internalLevel: string;
   recentRecords: CreditRecordItem[];
   updatedAt: string;
+}
+
+export interface AdminReportUserTraceItem {
+  reportId: number;
+  reporter: GovernanceUser;
+  targetType: string;
+  targetId: number;
+  relatedUser: GovernanceUser;
+  relatedUserRole: string;
+  reasonType: string;
+  description: string;
+  status: string;
+  priority: string;
+  handledByAdminId?: number | null;
+  handledAt?: string | null;
+  handlingNote?: string | null;
+  penaltyId?: number | null;
+  penaltyType?: string | null;
+  penaltyStatus?: string | null;
+  appealId?: number | null;
+  appealStatus?: string | null;
+  createdAt: string;
+}
+
+export interface AdminCreditTraceItem {
+  creditRecordId: number;
+  user: GovernanceUser;
+  sourceType: string;
+  sourceId?: number | null;
+  sourceLabel: string;
+  reason: string;
+  internalDeltaValue: number;
+  internalLevelBefore?: string | null;
+  internalLevelAfter?: string | null;
+  publicLabel: string;
+  createdByAdminId?: number | null;
+  reportId?: number | null;
+  penaltyId?: number | null;
+  appealId?: number | null;
+  createdAt: string;
 }
 
 export interface AdminQueue {
@@ -206,4 +247,16 @@ export function liftPenalty(id: number, reason: string) {
     method: "POST",
     body: JSON.stringify({ reason })
   });
+}
+
+export function getAdminUserGovernanceTrace(userId: number) {
+  return apiRequest<AdminReportUserTraceItem[]>(`/api/admin/n3/users/${userId}/governance-trace`);
+}
+
+export function getAdminUserCreditTrace(userId: number) {
+  return apiRequest<AdminCreditTraceItem[]>(`/api/admin/n3/users/${userId}/credit-trace`);
+}
+
+export function getAdminReportTrace(reportId: number) {
+  return apiRequest<AdminReportUserTraceItem[]>(`/api/admin/n3/reports/${reportId}/trace`);
 }

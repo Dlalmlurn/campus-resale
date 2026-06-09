@@ -102,6 +102,48 @@ public final class N3Responses {
     ) {
     }
 
+    public record AdminReportUserTraceResponse(
+            long reportId,
+            UserSummary reporter,
+            String targetType,
+            long targetId,
+            UserSummary relatedUser,
+            String relatedUserRole,
+            String reasonType,
+            String description,
+            String status,
+            String priority,
+            Long handledByAdminId,
+            Instant handledAt,
+            String handlingNote,
+            Long penaltyId,
+            String penaltyType,
+            String penaltyStatus,
+            Long appealId,
+            String appealStatus,
+            Instant createdAt
+    ) {
+    }
+
+    public record AdminCreditTraceResponse(
+            long creditRecordId,
+            UserSummary user,
+            String sourceType,
+            Long sourceId,
+            String sourceLabel,
+            String reason,
+            int internalDeltaValue,
+            String internalLevelBefore,
+            String internalLevelAfter,
+            String publicLabel,
+            Long createdByAdminId,
+            Long reportId,
+            Long penaltyId,
+            Long appealId,
+            Instant createdAt
+    ) {
+    }
+
     public record CreditSummaryResponse(
             long userId,
             int fulfillmentCount,

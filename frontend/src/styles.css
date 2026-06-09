@@ -321,8 +321,13 @@ main > section { animation: fadeInUp 180ms ease both; }
 .record-row p { margin: 4px 0 0; color: var(--muted); font-size: 0.8rem; line-height: 1.55; }
 .record-row .badge { width: max-content; }
 .record-row .button-row { flex-wrap: wrap; }
+.muted-line { color: var(--muted); font-size: 0.78rem; }
 .empty-line { margin: 0; color: var(--muted); font-size: 0.84rem; }
 .admin-governance { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
+.admin-trace-forms { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.admin-trace-forms .log-filter-bar { grid-template-columns: minmax(0, 1fr) auto; }
+.admin-trace-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.admin-trace-panel { min-height: 240px; }
 .seller-assist-panel { display: grid; gap: 12px; }
 .ai-advice { display: grid; gap: 10px; padding-top: 12px; border-top: 1px solid #e8eeeb; }
 .ai-advice div:first-child { display: grid; gap: 4px; }
@@ -370,7 +375,8 @@ main > section { animation: fadeInUp 180ms ease both; }
   .main-nav { grid-column: 1 / -1; grid-row: 2; overflow-x: auto; padding-bottom: 8px; }
   .goods-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .detail-grid, .auth-layout, .two-column-layout, .seller-layout, .order-detail-grid, .conversation-detail-grid, .profile-overview { grid-template-columns: 1fr; }
-  .admin-demo-actions, .log-filter-bar, .stat-grid, .profile-grid { grid-template-columns: 1fr 1fr; }
+  .admin-demo-actions, .log-filter-bar, .stat-grid, .profile-grid, .admin-trace-grid { grid-template-columns: 1fr 1fr; }
+  .admin-trace-forms { grid-template-columns: 1fr; }
   .order-timeline { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .auth-layout { min-height: 0; padding-top: 44px; }
   .auth-intro h1 { font-size: 2.4rem; }
@@ -388,7 +394,7 @@ main > section { animation: fadeInUp 180ms ease both; }
   .market-stat { display: none; }
   .search-toolbar, .market-filter-row { grid-template-columns: 1fr; }
   .goods-grid, .form-grid { grid-template-columns: 1fr; }
-  .admin-demo-actions, .admin-tabs--wide, .log-filter-bar, .stat-grid, .status-bar-row, .notification-row, .profile-stats, .profile-grid { grid-template-columns: 1fr; }
+  .admin-demo-actions, .admin-tabs--wide, .log-filter-bar, .stat-grid, .status-bar-row, .notification-row, .profile-stats, .profile-grid, .admin-trace-grid, .admin-trace-forms .log-filter-bar { grid-template-columns: 1fr; }
   .goods-image { height: 174px; }
   .goods-image.large { min-height: 280px; }
   .review-row { grid-template-columns: 1fr auto; }

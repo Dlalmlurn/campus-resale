@@ -2,6 +2,8 @@
 package com.campusresale.governance;
 
 import com.campusresale.governance.N3Responses.AppealResponse;
+import com.campusresale.governance.N3Responses.AdminCreditTraceResponse;
+import com.campusresale.governance.N3Responses.AdminReportUserTraceResponse;
 import com.campusresale.governance.N3Responses.CreditRecordResponse;
 import com.campusresale.governance.N3Responses.CreditSummaryResponse;
 import com.campusresale.governance.N3Responses.FavoriteResponse;
@@ -157,6 +159,31 @@ public class N3GovernanceRepository {
     public List<ReportResponse> listPendingReportsForAdmin() {
         return jdbcTemplate.query(REPORT_SELECT + " WHERE r.status IN ('PENDING', 'PROCESSING') " + REPORT_GROUP + " ORDER BY r.priority DESC, r.created_at DESC LIMIT 20",
                 new ReportRowMapper()
+        );
+    }
+
+    public List<AdminReportUserTraceResponse> listReportUserTraceByUser(long userId) {
+        return jdbcTemplate.query("""
+                        SELECT *
+                        FROM v_admin_report_user_trace
+                        WHERE related_user_id = ?
+                        ORDER BY created_at DESC, report_id DESC, related_user_role
+                        LIMIT 100
+                        """,
+                new AdminReportUserTraceRowMapper(),
+                userId
+        );
+    }
+
+    public List<AdminReportUserTraceResponse> listReportUserTraceByReport(long reportId) {
+        return jdbcTemplate.query("""
+                        SELECT *
+                        FROM v_admin_report_user_trace
+                        WHERE report_id = ?
+                        ORDER BY related_user_role, related_user_id
+                        """,
+                new AdminReportUserTraceRowMapper(),
+                reportId
         );
     }
 
@@ -670,11 +697,25 @@ public class N3GovernanceRepository {
         );
     }
 
+    public List<AdminCreditTraceResponse> listCreditTraceByUser(long userId) {
+        return jdbcTemplate.query("""
+                        SELECT *
+                        FROM v_admin_user_credit_trace
+                        WHERE user_id = ?
+                        ORDER BY created_at DESC, credit_record_id DESC
+                        LIMIT 100
+                        """,
+                new AdminCreditTraceRowMapper(),
+                userId
+        );
+    }
+
     public boolean targetExists(String targetType, long targetId) {
         String table = switch (targetType) {
             case "GOODS" -> "goods";
             case "ORDER" -> "trade_orders";
             case "USER" -> "users";
+            case "MESSAGE" -> "messages";
             default -> null;
         };
         if (table == null) {
@@ -906,6 +947,56 @@ public class N3GovernanceRepository {
                     rs.getLong("created_by_admin_id"),
                     nullableLong(rs, "lifted_by_admin_id"),
                     instant(rs, "lifted_at"),
+                    instant(rs, "created_at")
+            );
+        }
+    }
+
+    private static final class AdminReportUserTraceRowMapper implements RowMapper<AdminReportUserTraceResponse> {
+        @Override
+        public AdminReportUserTraceResponse mapRow(ResultSet rs, int rowNum) throws SQLException {
+            return new AdminReportUserTraceResponse(
+                    rs.getLong("report_id"),
+                    new UserSummary(rs.getLong("reporter_id"), rs.getString("reporter_nickname")),
+                    rs.getString("target_type"),
+                    rs.getLong("target_id"),
+                    new UserSummary(rs.getLong("related_user_id"), rs.getString("related_user_nickname")),
+                    rs.getString("related_user_role"),
+                    rs.getString("reason_type"),
+                    rs.getString("description"),
+                    rs.getString("status"),
+                    rs.getString("priority"),
+                    nullableLong(rs, "handled_by_admin_id"),
+                    instant(rs, "handled_at"),
+                    rs.getString("handling_note"),
+                    nullableLong(rs, "penalty_id"),
+                    rs.getString("penalty_type"),
+                    rs.getString("penalty_status"),
+                    nullableLong(rs, "appeal_id"),
+                    rs.getString("appeal_status"),
+                    instant(rs, "created_at")
+            );
+        }
+    }
+
+    private static final class AdminCreditTraceRowMapper implements RowMapper<AdminCreditTraceResponse> {
+        @Override
+        public AdminCreditTraceResponse mapRow(ResultSet rs, int rowNum) throws SQLException {
+            return new AdminCreditTraceResponse(
+                    rs.getLong("credit_record_id"),
+                    new UserSummary(rs.getLong("user_id"), rs.getString("user_nickname")),
+                    rs.getString("source_type"),
+                    nullableLong(rs, "source_id"),
+                    rs.getString("source_label"),
+                    rs.getString("reason"),
+                    rs.getInt("internal_delta_value"),
+                    rs.getString("internal_level_before"),
+                    rs.getString("internal_level_after"),
+                    rs.getString("public_label"),
+                    nullableLong(rs, "created_by_admin_id"),
+                    nullableLong(rs, "report_id"),
+                    nullableLong(rs, "penalty_id"),
+                    nullableLong(rs, "appeal_id"),
                     instant(rs, "created_at")
             );
         }

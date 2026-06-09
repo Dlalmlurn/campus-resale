@@ -1,5 +1,5 @@
 // 文件功能：后台验收闭环页（数据看板、认证/商品审核、审计日志、资金、账号管理）。原内联于 App.tsx。
-import { BarChart3, CreditCard, ShieldAlert, ShieldCheck, UserCog } from "lucide-react";
+import { BarChart3, CreditCard, History, ShieldAlert, ShieldCheck, UserCog } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { getAdminGoods, getAdminVerifications, reviewGoods, reviewVerification } from "../api/m1";
 import type { CampusVerification, GoodsSummary } from "../api/types";
@@ -8,9 +8,10 @@ import { auditStatusLabels, goodsStatusLabels, messageOf, verificationStatusLabe
 import { AdminDashboardPage } from "./admin-dashboard";
 import { AdminAuditLogsPage } from "./admin-audit-logs";
 import { AdminFundsPage } from "./admin-funds";
+import { AdminGovernanceTracePage } from "./admin-governance-trace";
 import { AdminUsersPage } from "./admin-users";
 
-type AdminTab = "verification" | "goods" | "dashboard" | "audit" | "funds" | "users";
+type AdminTab = "verification" | "goods" | "dashboard" | "audit" | "funds" | "users" | "governanceTrace";
 
 export function AdminPage(props: { notify: Notify; navigate: (route: Route) => void; isSuperAdmin: boolean }) {
   const [tab, setTab] = useState<AdminTab>("dashboard");
@@ -67,6 +68,7 @@ export function AdminPage(props: { notify: Notify; navigate: (route: Route) => v
           <button className="secondary-button compact" type="button" onClick={() => setTab("goods")}>商品审核</button>
           <button className="secondary-button compact" type="button" onClick={() => setTab("audit")}>查看审计日志</button>
           <button className="secondary-button compact" type="button" onClick={() => setTab("funds")}>资金管理</button>
+          <button className="secondary-button compact" type="button" onClick={() => setTab("governanceTrace")}>治理追踪</button>
           {props.isSuperAdmin && <button className="secondary-button compact" type="button" onClick={() => setTab("users")}>账号管理</button>}
           <button className="primary-button compact" type="button" onClick={() => props.navigate({ name: "notifications" })}>通知列表</button>
         </div>
@@ -90,6 +92,9 @@ export function AdminPage(props: { notify: Notify; navigate: (route: Route) => v
         <button className={tab === "funds" ? "active" : ""} type="button" onClick={() => setTab("funds")}>
           <CreditCard size={15} /> 资金
         </button>
+        <button className={tab === "governanceTrace" ? "active" : ""} type="button" onClick={() => setTab("governanceTrace")}>
+          <History size={15} /> 治理追踪
+        </button>
         {props.isSuperAdmin && (
           <button className={tab === "users" ? "active" : ""} type="button" onClick={() => setTab("users")}>
             <UserCog size={15} /> 账号
@@ -104,6 +109,8 @@ export function AdminPage(props: { notify: Notify; navigate: (route: Route) => v
       {tab === "audit" && <AdminAuditLogsPage notify={props.notify} />}
 
       {tab === "funds" && <AdminFundsPage notify={props.notify} />}
+
+      {tab === "governanceTrace" && <AdminGovernanceTracePage notify={props.notify} />}
 
       {/* 账号管理（仅超管） */}
       {tab === "users" && props.isSuperAdmin && <AdminUsersPage notify={props.notify} />}
