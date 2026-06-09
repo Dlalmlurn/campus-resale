@@ -13,11 +13,26 @@ import { AdminUsersPage } from "./admin-users";
 
 type AdminTab = "verification" | "goods" | "dashboard" | "audit" | "funds" | "users" | "governanceTrace";
 
-export function AdminPage(props: { notify: Notify; navigate: (route: Route) => void; isSuperAdmin: boolean }) {
+export function AdminPage(props: { notify: Notify; navigate: (route: Route) => void; isSuperAdmin: boolean; traceUserId?: number; traceReportId?: number }) {
   const [tab, setTab] = useState<AdminTab>("dashboard");
   const [verifications, setVerifications] = useState<CampusVerification[]>([]);
   const [goods, setGoods] = useState<GoodsSummary[]>([]);
   const [busy, setBusy] = useState(false);
+  // 治理追踪的初始目标：来自账号管理「追踪」按钮（同页）或举报队列跳转（路由参数）。
+  const [traceTarget, setTraceTarget] = useState<{ userId?: number; reportId?: number }>({});
+
+  // 路由带入 traceUserId/traceReportId 时（举报队列跨页跳转）自动切到追踪页并预填。
+  useEffect(() => {
+    if (props.traceUserId || props.traceReportId) {
+      setTraceTarget({ userId: props.traceUserId, reportId: props.traceReportId });
+      setTab("governanceTrace");
+    }
+  }, [props.traceUserId, props.traceReportId]);
+
+  const openUserTrace = (userId: number) => {
+    setTraceTarget({ userId });
+    setTab("governanceTrace");
+  };
 
   const load = useCallback(async () => {
     try {
@@ -110,10 +125,10 @@ export function AdminPage(props: { notify: Notify; navigate: (route: Route) => v
 
       {tab === "funds" && <AdminFundsPage notify={props.notify} />}
 
-      {tab === "governanceTrace" && <AdminGovernanceTracePage notify={props.notify} />}
+      {tab === "governanceTrace" && <AdminGovernanceTracePage notify={props.notify} initialUserId={traceTarget.userId} initialReportId={traceTarget.reportId} />}
 
       {/* 账号管理（仅超管） */}
-      {tab === "users" && props.isSuperAdmin && <AdminUsersPage notify={props.notify} />}
+      {tab === "users" && props.isSuperAdmin && <AdminUsersPage notify={props.notify} onTrace={openUserTrace} />}
 
       {/* 审核队列 */}
       {(tab === "verification" || tab === "goods") && (

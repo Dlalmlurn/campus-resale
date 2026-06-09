@@ -12,6 +12,7 @@ import com.campusresale.governance.N3Responses.AppealResponse;
 import com.campusresale.governance.N3Responses.PenaltyResponse;
 import com.campusresale.governance.N3Responses.RefundResponse;
 import com.campusresale.governance.N3Responses.ReportResponse;
+import com.campusresale.governance.N3Responses.UserSummary;
 import com.campusresale.platform.api.ApiExceptions;
 import com.campusresale.platform.security.CurrentPrincipal;
 import com.campusresale.platform.security.CurrentPrincipalContext;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -72,6 +74,12 @@ public class AdminN3GovernanceController {
     @GetMapping("/refunds")
     public List<RefundResponse> refunds(HttpServletRequest request) {
         return service.adminRefunds(principal(request), ip(request));
+    }
+
+    // 追踪页先按昵称/用户名/邮箱搜人，拿到 ID 再查具体追踪，省去手敲数字 ID。
+    @GetMapping("/users/search")
+    public List<UserSummary> searchUsers(@RequestParam(required = false) String keyword) {
+        return service.adminSearchUsers(keyword);
     }
 
     @GetMapping("/users/{userId}/governance-trace")

@@ -1,5 +1,5 @@
 // 文件功能：超级管理员账号管理页（查询、启用/锁定/禁用、授予/撤销角色）。对应后端 AdminUserController。
-import { RefreshCw, ShieldCheck, UserCog, X } from "lucide-react";
+import { History, RefreshCw, ShieldCheck, UserCog, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { assignAdminUserRole, getAdminUsers, removeAdminUserRole, updateAdminUserStatus, type AdminUser } from "../api/admin-users";
 import { EmptyBlock, LoadingBlock } from "../components/ui";
@@ -26,7 +26,7 @@ const assignableRoles: Array<{ value: string; label: string }> = [
 
 const roleLabels: Record<string, string> = Object.fromEntries(assignableRoles.map((role) => [role.value, role.label]));
 
-export function AdminUsersPage(props: { notify: Notify }) {
+export function AdminUsersPage(props: { notify: Notify; onTrace?: (userId: number) => void }) {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [keyword, setKeyword] = useState("");
   const [accountStatus, setAccountStatus] = useState("");
@@ -150,6 +150,9 @@ export function AdminUsersPage(props: { notify: Notify }) {
                     {assignableRoles.filter((role) => !user.roles.includes(role.value)).map((role) => <option value={role.value} key={role.value}>{role.label}</option>)}
                   </select>
                 </label>
+                {props.onTrace && (
+                  <button className="text-button" type="button" onClick={() => props.onTrace?.(user.id)}><History size={14} /> 治理追踪</button>
+                )}
               </div>
             </article>
           ))}

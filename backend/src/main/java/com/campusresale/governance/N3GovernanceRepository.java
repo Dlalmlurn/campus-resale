@@ -710,6 +710,23 @@ public class N3GovernanceRepository {
         );
     }
 
+    // 治理追踪用的轻量用户查找：按用户名/昵称/邮箱模糊匹配，供管理员先搜人再查 ID。
+    public List<UserSummary> searchUsers(String keyword) {
+        String like = "%" + keyword.trim().toLowerCase() + "%";
+        return jdbcTemplate.query("""
+                        SELECT id, nickname
+                        FROM users
+                        WHERE lower(username) LIKE ?
+                           OR lower(nickname) LIKE ?
+                           OR lower(COALESCE(personal_email, '')) LIKE ?
+                        ORDER BY id
+                        LIMIT 20
+                        """,
+                (rs, rowNum) -> new UserSummary(rs.getLong("id"), rs.getString("nickname")),
+                like, like, like
+        );
+    }
+
     public boolean targetExists(String targetType, long targetId) {
         String table = switch (targetType) {
             case "GOODS" -> "goods";

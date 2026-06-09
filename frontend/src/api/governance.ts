@@ -1,5 +1,5 @@
 // 文件功能：治理、申诉、退款、收藏关注和管理员治理追踪 API。
-import { apiRequest } from "./client";
+import { apiRequest, queryString } from "./client";
 
 export interface GovernanceUser {
   id: number;
@@ -259,4 +259,9 @@ export function getAdminUserCreditTrace(userId: number) {
 
 export function getAdminReportTrace(reportId: number) {
   return apiRequest<AdminReportUserTraceItem[]>(`/api/admin/n3/reports/${reportId}/trace`);
+}
+
+// 按关键字搜用户，返回 {id, nickname} 列表，供追踪页选人后再查 ID。
+export function searchAdminTraceUsers(keyword: string) {
+  return apiRequest<GovernanceUser[]>(`/api/admin/n3/users/search${queryString({ keyword })}`);
 }

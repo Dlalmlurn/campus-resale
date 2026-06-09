@@ -1,13 +1,15 @@
 // 文件功能：管理员治理追踪页，按用户或举报串起举报、处罚、申诉与信用影响。
-import { RefreshCw, Search, ShieldAlert } from "lucide-react";
+import { RefreshCw, Search, ShieldAlert, UserSearch } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   getAdminReportTrace,
   getAdminUserCreditTrace,
   getAdminUserGovernanceTrace,
+  searchAdminTraceUsers,
   type AdminCreditTraceItem,
-  type AdminReportUserTraceItem
+  type AdminReportUserTraceItem,
+  type GovernanceUser
 } from "../api/governance";
 import { EmptyBlock, LoadingBlock } from "../components/ui";
 import { formatDate, messageOf, type Notify } from "../shared/app-shared";
@@ -31,19 +33,25 @@ const relationLabels: Record<string, string> = {
   MESSAGE_SELLER: "消息卖家"
 };
 
-export function AdminGovernanceTracePage(props: { notify: Notify }) {
-  const [userId, setUserId] = useState("");
-  const [reportId, setReportId] = useState("");
+// initialUserId / initialReportId 由外部（账号管理「追踪」按钮、举报队列跳转）带入并自动加载。
+export function AdminGovernanceTracePage(props: { notify: Notify; initialUserId?: number; initialReportId?: number }) {
+  const [userId, setUserId] = useState(props.initialUserId ? String(props.initialUserId) : "");
+  const [reportId, setReportId] = useState(props.initialReportId ? String(props.initialReportId) : "");
   const [reportTraces, setReportTraces] = useState<AdminReportUserTraceItem[]>([]);
   const [creditTraces, setCreditTraces] = useState<AdminCreditTraceItem[]>([]);
   const [reportLookupTraces, setReportLookupTraces] = useState<AdminReportUserTraceItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [userKeyword, setUserKeyword] = useState("");
+  const [userMatches, setUserMatches] = useState<GovernanceUser[]>([]);
+  const [searching, setSearching] = useState(false);
 
-  const loadUserTrace = async (event?: FormEvent) => {
-    event?.preventDefault();
-    const numericUserId = Number(userId);
+  const { notify } = props;
+
+  // 按用户 ID 拉取治理追踪 + 信用流水；显式传 id 便于从搜索结果或外部入口直接加载。
+  const runUserTrace = useCallback(async (rawUserId: string) => {
+    const numericUserId = Number(rawUserId);
     if (!numericUserId) {
-      props.notify("error", "请输入有效的用户 ID");
+      notify("error", "请输入有效的用户 ID");
       return;
     }
     setLoading(true);
@@ -55,27 +63,68 @@ export function AdminGovernanceTracePage(props: { notify: Notify }) {
       setReportTraces(governance);
       setCreditTraces(credit);
     } catch (error) {
-      props.notify("error", messageOf(error));
+      notify("error", messageOf(error));
     } finally {
       setLoading(false);
     }
-  };
+  }, [notify]);
 
-  const loadReportTrace = async (event?: FormEvent) => {
-    event?.preventDefault();
-    const numericReportId = Number(reportId);
+  const runReportTrace = useCallback(async (rawReportId: string) => {
+    const numericReportId = Number(rawReportId);
     if (!numericReportId) {
-      props.notify("error", "请输入有效的举报 ID");
+      notify("error", "请输入有效的举报 ID");
       return;
     }
     setLoading(true);
     try {
       setReportLookupTraces(await getAdminReportTrace(numericReportId));
     } catch (error) {
-      props.notify("error", messageOf(error));
+      notify("error", messageOf(error));
     } finally {
       setLoading(false);
     }
+  }, [notify]);
+
+  // 外部带入初始 ID 时自动查询，免去再点一次。
+  useEffect(() => {
+    if (props.initialUserId) void runUserTrace(String(props.initialUserId));
+  }, [props.initialUserId, runUserTrace]);
+  useEffect(() => {
+    if (props.initialReportId) void runReportTrace(String(props.initialReportId));
+  }, [props.initialReportId, runReportTrace]);
+
+  const loadUserTrace = (event?: FormEvent) => {
+    event?.preventDefault();
+    void runUserTrace(userId);
+  };
+
+  const loadReportTrace = (event?: FormEvent) => {
+    event?.preventDefault();
+    void runReportTrace(reportId);
+  };
+
+  // 不知道 ID 时先按昵称/用户名/邮箱搜人，点中后填入 ID 并直接查询。
+  const searchUsers = async (event?: FormEvent) => {
+    event?.preventDefault();
+    if (!userKeyword.trim()) {
+      setUserMatches([]);
+      return;
+    }
+    setSearching(true);
+    try {
+      setUserMatches(await searchAdminTraceUsers(userKeyword.trim()));
+    } catch (error) {
+      notify("error", messageOf(error));
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const pickUser = (user: GovernanceUser) => {
+    setUserId(String(user.id));
+    setUserMatches([]);
+    setUserKeyword("");
+    void runUserTrace(String(user.id));
   };
 
   return (
@@ -85,10 +134,17 @@ export function AdminGovernanceTracePage(props: { notify: Notify }) {
           <p className="eyebrow">治理追踪</p>
           <h2><ShieldAlert size={18} /> 用户与信用影响</h2>
         </div>
-        <button className="icon-button subtle" type="button" aria-label="刷新追踪结果" onClick={() => void loadUserTrace()}><RefreshCw size={17} /></button>
+        <button className="icon-button subtle" type="button" aria-label="刷新追踪结果" onClick={() => void runUserTrace(userId)}><RefreshCw size={17} /></button>
       </div>
 
       <div className="admin-trace-forms">
+        {/* 按昵称/用户名/邮箱搜人，不必预先知道数字 ID */}
+        <form className="log-filter-bar" onSubmit={searchUsers}>
+          <label className="search-field">
+            <input value={userKeyword} onChange={(event) => setUserKeyword(event.target.value)} placeholder="昵称 / 用户名 / 邮箱" />
+          </label>
+          <button className="secondary-button compact" type="submit" disabled={searching}><UserSearch size={15} /> 搜用户</button>
+        </form>
         <form className="log-filter-bar" onSubmit={loadUserTrace}>
           <label className="search-field">
             <input value={userId} onChange={(event) => setUserId(event.target.value)} placeholder="用户 ID" />
@@ -102,6 +158,16 @@ export function AdminGovernanceTracePage(props: { notify: Notify }) {
           <button className="secondary-button compact" type="submit"><Search size={15} /> 查询举报</button>
         </form>
       </div>
+
+      {userMatches.length > 0 && (
+        <div className="admin-trace-matches">
+          {userMatches.map((user) => (
+            <button className="badge neutral" type="button" key={user.id} onClick={() => pickUser(user)}>
+              {user.nickname} #{user.id}
+            </button>
+          ))}
+        </div>
+      )}
 
       {loading ? <LoadingBlock /> : (
         <div className="admin-trace-grid">

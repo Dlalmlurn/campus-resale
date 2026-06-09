@@ -277,8 +277,8 @@ export function App() {
         {route.name === "auth" && <AuthPage currentUser={currentUser} onAuthenticated={setCurrentUser} navigate={navigate} notify={notify} />}
         {route.name === "verification" && currentUser && <VerificationPage currentUser={currentUser} onUserChange={setCurrentUser} notify={notify} />}
         {route.name === "seller" && currentUser?.canTrade && <SellerPage catalog={catalog} notify={notify} />}
-        {route.name === "governance" && currentUser && <GovernancePage currentUser={currentUser} notify={notify} />}
-        {route.name === "admin" && isAdmin(currentUser) && <AdminPage notify={notify} navigate={navigate} isSuperAdmin={isSuperAdmin(currentUser)} />}
+        {route.name === "governance" && currentUser && <GovernancePage currentUser={currentUser} notify={notify} navigate={navigate} />}
+        {route.name === "admin" && isAdmin(currentUser) && <AdminPage notify={notify} navigate={navigate} isSuperAdmin={isSuperAdmin(currentUser)} traceUserId={route.traceUserId} traceReportId={route.traceReportId} />}
       </main>
     </div>
   );

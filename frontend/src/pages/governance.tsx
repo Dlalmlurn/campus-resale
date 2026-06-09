@@ -12,6 +12,7 @@ import {
 } from "../api/governance";
 import { uploadFile } from "../api/m1";
 import type { CurrentUser } from "../api/types";
+import type { Route } from "../shared/app-shared";
 
 type Notify = (tone: "success" | "error", text: string) => void;
 
@@ -44,7 +45,7 @@ const penaltyTypeLabels: Record<string, string> = {
   ACCOUNT_LOCK: "账号锁定"
 };
 
-export function GovernancePage(props: { currentUser: CurrentUser; notify: Notify }) {
+export function GovernancePage(props: { currentUser: CurrentUser; notify: Notify; navigate?: (route: Route) => void }) {
   const [overview, setOverview] = useState<GovernanceOverview | null>(null);
   const [busy, setBusy] = useState(false);
   const [appealForm, setAppealForm] = useState({ reportId: "", description: "" });
@@ -186,6 +187,8 @@ export function GovernancePage(props: { currentUser: CurrentUser; notify: Notify
                     <RecordRow key={item.id} title={`举报 #${item.id} · ${item.reporter.nickname}`} badge={reportStatusLabels[item.status] ?? item.status} text={`待核实内容：${item.description}`}>
                       <button className="secondary-button compact" disabled={busy} type="button" onClick={() => void run(() => handleReport(item.id, { status: "UPHELD", handlingNote: "管理员核实举报成立", penaltyUserId: item.targetType === "USER" ? item.targetId : null, penaltyType: "WARNING" }), "举报已处理")}>成立</button>
                       <button className="text-button" disabled={busy} type="button" onClick={() => void run(() => handleReport(item.id, { status: "REJECTED", handlingNote: "证据不足，举报不成立" }), "举报已驳回")}>驳回</button>
+                      {/* 跳转到后台治理追踪页，带上举报 ID 直接查关联用户 */}
+                      {props.navigate && <button className="text-button" type="button" onClick={() => props.navigate?.({ name: "admin", traceReportId: item.id })}>查看追踪</button>}
                     </RecordRow>
                   ))}
                 </RecordColumn>

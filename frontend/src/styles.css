@@ -324,8 +324,10 @@ main > section { animation: fadeInUp 180ms ease both; }
 .muted-line { color: var(--muted); font-size: 0.78rem; }
 .empty-line { margin: 0; color: var(--muted); font-size: 0.84rem; }
 .admin-governance { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
-.admin-trace-forms { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.admin-trace-forms { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
 .admin-trace-forms .log-filter-bar { grid-template-columns: minmax(0, 1fr) auto; }
+.admin-trace-matches { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.admin-trace-matches .badge { cursor: pointer; border: none; }
 .admin-trace-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .admin-trace-panel { min-height: 240px; }
 .seller-assist-panel { display: grid; gap: 12px; }

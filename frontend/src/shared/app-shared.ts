@@ -15,7 +15,7 @@ export type Route =
   | { name: "verification" }
   | { name: "seller" }
   | { name: "governance" }
-  | { name: "admin" };
+  | { name: "admin"; traceUserId?: number; traceReportId?: number };
 
 export type Catalog = {
   categories: CategorySummary[];
@@ -93,6 +93,9 @@ export function parseRoute(): Route {
   if (value.startsWith("goods/")) return { name: "goods", id: Number(value.split("/")[1]) };
   if (value.startsWith("conversations/")) return { name: "conversation", id: Number(value.split("/")[1]) };
   if (value.startsWith("orders/")) return { name: "order", id: Number(value.split("/")[1]) };
+  // 举报队列「查看追踪」跳转：#/admin/user/45 或 #/admin/report/123
+  if (value.startsWith("admin/user/")) return { name: "admin", traceUserId: Number(value.split("/")[2]) };
+  if (value.startsWith("admin/report/")) return { name: "admin", traceReportId: Number(value.split("/")[2]) };
   if (["market", "conversations", "orders", "profile", "notifications", "auth", "verification", "seller", "governance", "admin"].includes(value)) return { name: value as Route["name"] } as Route;
   return { name: "market" };
 }
@@ -101,6 +104,8 @@ export function routeHash(route: Route) {
   if (route.name === "goods") return `#/goods/${route.id}`;
   if (route.name === "conversation") return `#/conversations/${route.id}`;
   if (route.name === "order") return `#/orders/${route.id}`;
+  if (route.name === "admin" && route.traceUserId) return `#/admin/user/${route.traceUserId}`;
+  if (route.name === "admin" && route.traceReportId) return `#/admin/report/${route.traceReportId}`;
   return `#/${route.name}`;
 }
 

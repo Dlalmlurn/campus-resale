@@ -22,6 +22,7 @@ import com.campusresale.governance.N3Responses.PenaltyResponse;
 import com.campusresale.governance.N3Responses.RefundResponse;
 import com.campusresale.governance.N3Responses.ReportResponse;
 import com.campusresale.governance.N3Responses.ToggleResponse;
+import com.campusresale.governance.N3Responses.UserSummary;
 import com.campusresale.notification.NotificationService;
 import com.campusresale.notification.NotificationType;
 import com.campusresale.platform.api.ApiExceptions;
@@ -203,6 +204,14 @@ public class N3GovernanceService {
     public List<AdminCreditTraceResponse> adminCreditTraceByUser(long userId, CurrentPrincipal admin, String ipAddress) {
         auditLogRepository.recordSensitiveAccess(admin.id(), "CREDIT_USER_TRACE", userId, "查看用户信用追踪", "ALLOWED", ipAddress);
         return repository.listCreditTraceByUser(userId);
+    }
+
+    // 追踪页的用户搜索：纯名称查找，不返回敏感字段，故不计入敏感访问审计。
+    public List<UserSummary> adminSearchUsers(String keyword) {
+        if (keyword == null || keyword.isBlank()) {
+            return List.of();
+        }
+        return repository.searchUsers(keyword);
     }
 
     public List<AdminReportUserTraceResponse> adminReportTraceByReport(long reportId, CurrentPrincipal admin, String ipAddress) {
